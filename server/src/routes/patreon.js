@@ -21,7 +21,7 @@ const ensurePatreonService = (req, res, next) => {
 // OAuth Routes
 router.get('/auth/url', ensurePatreonService, async (req, res) => {
     try {
-        const scopes = req.query.scopes ? req.query.scopes.split(',') : ['identity', 'campaigns'];
+        const scopes = req.query.scopes ? req.query.scopes.split(',') : ['identity', 'identity[email]', 'campaigns'];
         const authUrl = await req.app.locals.patreonManager.getAuthorizationUrl(scopes);
 
         res.json({

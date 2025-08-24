@@ -193,7 +193,7 @@ app.use('/api/patreon', patreonRoutes);
 
 // Patreon OAuth routes
 app.get('/auth/patreon', (req, res) => {
-    const scopes = ['identity', 'campaigns', 'campaigns.members'];
+    const scopes = ['identity', 'identity[email]', 'campaigns', 'campaigns.members'];
     const authUrl = patreonOAuth.getAuthorizationUrl(scopes);
     res.redirect(authUrl);
 });
@@ -590,8 +590,13 @@ app.get('/auth/patreon/callback', async (req, res) => {
             userAgent: process.env.PATREON_USER_AGENT || 'BambiSleep-Chat-Patreon/1.0.0'
         });
 
-        // Get user info
-        const user = await apiClient.getCurrentUser();
+        // Get user info with explicit fields
+        const user = await apiClient.getCurrentUser({
+            fields: {
+                user: ['about', 'created', 'email', 'first_name', 'full_name', 'image_url', 'last_name', 'social_connections', 'thumb_url', 'url', 'vanity', 'is_email_verified']
+            },
+            include: 'memberships'
+        });
         const userData = Array.isArray(user.data) ? user.data[0] : user.data;
 
         if (!userData) {
@@ -855,26 +860,23 @@ app.get('/auth/patreon/callback', async (req, res) => {
 
                     <div class="user-info">
                         <h3>👤 Your Profile</h3>
-                        <p><strong>Name:</strong> ${userData.attributes?.full_name || 'Not provided'}</p>
+                        <p><strong>Name:</strong> ${userData.attributes?.full_name || userData.attributes?.first_name + ' ' + userData.attributes?.last_name || 'Not provided'}</p>
+                        <p><strong>First Name:</strong> ${userData.attributes?.first_name || 'Not provided'}</p>
+                        <p><strong>Last Name:</strong> ${userData.attributes?.last_name || 'Not provided'}</p>
                         <p><strong>Patreon ID:</strong> ${userData.id}</p>
                         <p><strong>Email:</strong> ${userData.attributes?.email || 'Not provided'}</p>
+                        <p><strong>Email Verified:</strong> ${userData.attributes?.is_email_verified ? 'Yes' : 'No'}</p>
+                        <p><strong>Vanity URL:</strong> ${userData.attributes?.vanity || 'Not provided'}</p>
+                        <p><strong>Account Created:</strong> ${userData.attributes?.created ? new Date(userData.attributes.created).toLocaleDateString() : 'Not provided'}</p>
+                        <p><strong>About:</strong> ${userData.attributes?.about || 'Not provided'}</p>
+                        ${userData.attributes?.image_url ? `<p><strong>Profile Image:</strong> <a href="${userData.attributes.image_url}" target="_blank">View Image</a></p>` : ''}
                     </div>
 
                     <div>
                         <a href="/dashboard" class="btn btn-dashboard">🏠 Go to Dashboard</a>
                         <a href="/terminal" class="btn btn-terminal">💬 Open Chat Terminal</a>
                     </div>
-
-                    <div class="countdown">
-                        <p>Auto-redirecting to dashboard in 3 seconds...</p>
-                    </div>
                 </div>
-                <script>
-                    // Auto-redirect to dashboard after 3 seconds
-                    setTimeout(() => {
-                        window.location.href = '/dashboard';
-                    }, 3000);
-                </script>
             </body>
             </html>
         `);
@@ -1745,7 +1747,7 @@ io.on('connection', (socket) => {
     // Patreon OAuth flow via Socket.IO
     socket.on('patreon-auth-request', (data) => {
         const { requestId } = data;
-        const scopes = ['identity', 'campaigns', 'campaigns.members'];
+        const scopes = ['identity', 'identity[email]', 'campaigns', 'campaigns.members'];
         const authUrl = patreonOAuth.getAuthorizationUrl(scopes, requestId);
 
         socket.emit('patreon-auth-response', {
