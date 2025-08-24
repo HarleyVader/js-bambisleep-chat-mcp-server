@@ -16,7 +16,7 @@ class MCPAgent {
 
     async start() {
         console.log('🇦🇹 Starting Agent Dr Girlfriend...');
-        
+
         // Check if agent directory exists
         if (!await fs.pathExists(this.agentPath)) {
             console.error('❌ Agent Dr Girlfriend not found at:', this.agentPath);
@@ -38,7 +38,7 @@ class MCPAgent {
     async installDependencies() {
         return new Promise((resolve, reject) => {
             console.log('🔧 Installing dependencies for Agent Dr Girlfriend...');
-            
+
             const npmInstall = spawn('npm', ['install'], {
                 cwd: this.agentPath,
                 stdio: 'inherit',
@@ -60,7 +60,7 @@ class MCPAgent {
     async startReactAgent() {
         return new Promise((resolve) => {
             console.log('🚀 Starting Agent Dr Girlfriend React application...');
-            
+
             this.agentProcess = spawn('npm', ['run', 'dev'], {
                 cwd: this.agentPath,
                 stdio: 'inherit',
@@ -127,17 +127,17 @@ process.on('SIGTERM', async () => {
 // Main execution
 async function main() {
     console.log('🇦🇹 MCP Agent Docking System - Austrian GDPR Compliant');
-    console.log('=' .repeat(60));
-    
+    console.log('='.repeat(60));
+
     const agent = new MCPAgent();
     global.mcpAgent = agent;
-    
+
     try {
         const started = await agent.start();
         if (started) {
             console.log('🎉 Agent Dr Girlfriend docking system operational');
             console.log('🔗 Ready for MCP server integration');
-            
+
             // Keep the process alive
             setInterval(() => {
                 const status = agent.getStatus();
@@ -146,7 +146,7 @@ async function main() {
                     process.exit(1);
                 }
             }, 30000); // Check every 30 seconds
-            
+
         } else {
             console.error('❌ Failed to start Agent Dr Girlfriend');
             process.exit(1);

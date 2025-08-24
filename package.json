@@ -12,8 +12,10 @@
     "scripts": {
         "dev": "concurrently \"npm run dev:server\" \"npm run dev:agent\"",
         "dev:server": "cd server && npm run dev",
-        "dev:agent": "cd agent && npm run dev",
-        "build": "npm run build --workspaces",
+        "dev:agent": "cd agent/js-bambisleep-chat-agent-dr-girlfriend && npm run dev",
+        "dev:unified": "cd server && npm run dev",
+        "build": "npm run build --workspaces && npm run build:agent",
+        "build:agent": "cd agent/js-bambisleep-chat-agent-dr-girlfriend && npm run build",
         "test": "npm run test --workspaces",
         "lint": "eslint . --ext .js,.ts",
         "lint:fix": "eslint . --ext .js,.ts --fix",

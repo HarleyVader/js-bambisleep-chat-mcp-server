@@ -6,7 +6,7 @@ class RealMCPDockingService {
         this.dockingPort = null;
         this.patronVerificationKey = null;
         this.austrianComplianceMode = true;
-        this.serverBaseUrl = 'http://localhost:3000'; // MCP server URL
+        this.serverBaseUrl = window.location.origin; // Use same origin as current page
         this.dockId = null;
         this.handshakeToken = null;
         this.heartbeatInterval = null;

@@ -21,7 +21,7 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+        origin: process.env.CORS_ORIGIN || 'https://fickdichselber.com',
         methods: ['GET', 'POST']
     }
 });
@@ -38,12 +38,10 @@ app.use(helmet({
     }
 }));
 
-// CORS configuration - Allow agent and development access
+// CORS configuration - Use /api/ routes and socket.io instead of direct ports
 const allowedOrigins = [
-    'http://localhost:3004', // Agent Dr Girlfriend
-    'http://localhost:3000', // MCP Server
-    'http://localhost:3001', // Alternative development port
-    process.env.CORS_ORIGIN || 'http://localhost:3004'
+    'https://fickdichselber.com', // Production domain
+    process.env.CORS_ORIGIN || 'https://fickdichselber.com'
 ];
 
 app.use(cors({
@@ -97,6 +95,19 @@ app.use('/agent', agentIntegrationRoutes);
 // Serve static files for agent integration
 app.use('/static', express.static(path.join(__dirname, '../public')));
 
+// Serve agent files directly from the main server
+app.use('/agent-app', express.static(path.join(__dirname, '../../agent/js-bambisleep-chat-agent-dr-girlfriend/dist')));
+
+// Serve agent at root when no other routes match (SPA fallback)
+app.get('*', (req, res, next) => {
+    // Skip API routes
+    if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/health')) {
+        return next();
+    }
+    // Serve agent app
+    res.sendFile(path.join(__dirname, '../../agent/js-bambisleep-chat-agent-dr-girlfriend/dist/index.html'));
+});
+
 // Health check endpoint
 app.get('/health', (_req, res) => {
     res.json({
@@ -120,18 +131,117 @@ app.get('/', (_req, res) => {
     });
 });
 
-// Socket.IO for real-time communication
+// Socket.IO for real-time communication and MCP docking
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
+    // MCP Docking via Socket.IO
+    socket.on('mcp-dock-request', async (data) => {
+        console.log('MCP dock request received via Socket.IO:', data);
+        try {
+            const { requestId, serverConfig, agentId } = data;
+
+            // Use the same logic as HTTP endpoint but via Socket.IO
+            const crypto = require('crypto');
+            const handshakeToken = crypto.randomBytes(32).toString('hex');
+            const dockId = `socket_dock_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
+            const secureChannelId = crypto.randomBytes(16).toString('hex');
+
+            const dockSession = {
+                dockId,
+                agentId: agentId || 'bambisleep-agent-dr-girlfriend',
+                handshakeToken,
+                secureChannelId,
+                austrianCompliance: true,
+                gdprCompliant: true,
+                status: 'CONNECTED',
+                createdAt: new Date().toISOString(),
+                lastHeartbeat: new Date().toISOString(),
+                dataProtectionLevel: 'AUSTRIAN_ENHANCED',
+                complianceVersion: '1.0.0',
+                socketId: socket.id
+            };
+
+            // Store session (you'll need to import the activeAgentDocks from agent-dock.js)
+            // For now, we'll use a simple in-memory store
+            if (!global.socketDocks) global.socketDocks = new Map();
+            global.socketDocks.set(dockId, dockSession);
+
+            socket.emit('mcp-dock-response', {
+                requestId,
+                success: true,
+                port: {
+                    dockId,
+                    handshakeToken,
+                    secureChannelId,
+                    status: 'CONNECTED',
+                    austrianCompliance: true,
+                    endpoints: {
+                        heartbeat: 'socket-heartbeat',
+                        deposit: 'socket-deposit',
+                        withdraw: 'socket-withdraw',
+                        patron: 'socket-patron',
+                        gdpr: 'socket-gdpr'
+                    }
+                }
+            });
+
+        } catch (error) {
+            console.error('🚨 Socket MCP docking failed:', error);
+            socket.emit('mcp-dock-response', {
+                requestId: data.requestId,
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+    // Socket.IO heartbeat
+    socket.on('mcp-heartbeat', (data) => {
+        console.log('💓 Socket heartbeat received:', data);
+        if (global.socketDocks && global.socketDocks.has(data.dockId)) {
+            const dock = global.socketDocks.get(data.dockId);
+            dock.lastHeartbeat = new Date().toISOString();
+            global.socketDocks.set(data.dockId, dock);
+        }
+    });
+
+    // Patron verification via Socket.IO
+    socket.on('patron-verify', async (data) => {
+        const { requestId, dockId, patronCredentials } = data;
+        try {
+            // Implement patron verification logic here
+            // For now, we'll simulate success
+            socket.emit(`patron-verify-response-${requestId}`, {
+                success: true,
+                patronVerified: true,
+                bambisleepId: patronCredentials.bambisleepId
+            });
+        } catch (error) {
+            socket.emit(`patron-verify-response-${requestId}`, {
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
     socket.on('dock-request', (data) => {
-        console.log('Dock request received:', data);
-        // Handle docking requests
+        console.log('Legacy dock request received:', data);
+        // Handle legacy docking requests
         socket.emit('dock-response', { status: 'processing', requestId: data.requestId });
     });
 
     socket.on('disconnect', () => {
         console.log('Client disconnected:', socket.id);
+        // Clean up any socket-specific dock sessions
+        if (global.socketDocks) {
+            for (const [dockId, dock] of global.socketDocks.entries()) {
+                if (dock.socketId === socket.id) {
+                    console.log(`🧹 Cleaning up socket dock session: ${dockId}`);
+                    global.socketDocks.delete(dockId);
+                }
+            }
+        }
     });
 });
 
@@ -156,7 +266,7 @@ app.use((req, res) => {
     });
 });
 
-const PORT = process.env.PORT || 8888;
+const PORT = process.env.PORT || 6969;
 const HOST = process.env.HOST || '0.0.0.0';
 
 server.listen(PORT, HOST, () => {

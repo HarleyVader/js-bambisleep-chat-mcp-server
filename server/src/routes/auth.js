@@ -19,7 +19,7 @@ router.get('/github/callback',
     passport.authenticate('github', { failureRedirect: '/auth/failure' }),
     (req, res) => {
         // Successful authentication
-        res.redirect(process.env.CLIENT_SUCCESS_REDIRECT || 'http://localhost:3000/dashboard');
+        res.redirect(process.env.CLIENT_SUCCESS_REDIRECT || 'https://fickdichselber.com/dashboard');
     }
 );
 
@@ -30,7 +30,7 @@ router.get('/patreon/callback',
     passport.authenticate('patreon', { failureRedirect: '/auth/failure' }),
     (req, res) => {
         // Successful authentication
-        res.redirect(process.env.CLIENT_SUCCESS_REDIRECT || 'http://localhost:3000/dashboard');
+        res.redirect(process.env.CLIENT_SUCCESS_REDIRECT || 'https://fickdichselber.com/dashboard');
     }
 );
 
