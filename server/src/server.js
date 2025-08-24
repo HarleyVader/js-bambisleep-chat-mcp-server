@@ -98,14 +98,37 @@ app.use('/static', express.static(path.join(__dirname, '../public')));
 // Serve agent files directly from the main server
 app.use('/agent-app', express.static(path.join(__dirname, '../../agent/js-bambisleep-chat-agent-dr-girlfriend/dist')));
 
-// Serve agent at root when no other routes match (SPA fallback)
+// Serve landing page at root
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+// Serve agent terminal interface
+app.get('/terminal', (req, res) => {
+    res.sendFile(path.join(__dirname, '../../agent/js-bambisleep-chat-agent-dr-girlfriend/dist/index.html'));
+});
+
+// Dashboard route (after successful auth)
+app.get('/dashboard', (req, res) => {
+    if (req.isAuthenticated()) {
+        res.sendFile(path.join(__dirname, '../../agent/js-bambisleep-chat-agent-dr-girlfriend/dist/index.html'));
+    } else {
+        res.redirect('/');
+    }
+});
+
+// Catch all for unmatched routes (excluding API routes)
 app.get('*', (req, res, next) => {
-    // Skip API routes
-    if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/health')) {
+    // Skip API routes, auth routes, health, static assets
+    if (req.path.startsWith('/api') ||
+        req.path.startsWith('/auth') ||
+        req.path.startsWith('/health') ||
+        req.path.startsWith('/static') ||
+        req.path.startsWith('/agent-app')) {
         return next();
     }
-    // Serve agent app
-    res.sendFile(path.join(__dirname, '../../agent/js-bambisleep-chat-agent-dr-girlfriend/dist/index.html'));
+    // Redirect to landing page for unknown routes
+    res.redirect('/');
 });
 
 // Health check endpoint

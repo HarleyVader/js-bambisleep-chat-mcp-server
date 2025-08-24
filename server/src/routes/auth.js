@@ -1,5 +1,6 @@
 const express = require('express');
 const passport = require('passport');
+const path = require('path');
 const router = express.Router();
 
 // Middleware to check if user is authenticated
@@ -19,7 +20,7 @@ router.get('/github/callback',
     passport.authenticate('github', { failureRedirect: '/auth/failure' }),
     (req, res) => {
         // Successful authentication
-        res.redirect(process.env.CLIENT_SUCCESS_REDIRECT || 'https://fickdichselber.com/dashboard');
+        res.redirect(process.env.CLIENT_SUCCESS_REDIRECT || '/dashboard');
     }
 );
 
@@ -30,7 +31,7 @@ router.get('/patreon/callback',
     passport.authenticate('patreon', { failureRedirect: '/auth/failure' }),
     (req, res) => {
         // Successful authentication
-        res.redirect(process.env.CLIENT_SUCCESS_REDIRECT || 'https://fickdichselber.com/dashboard');
+        res.redirect(process.env.CLIENT_SUCCESS_REDIRECT || '/dashboard');
     }
 );
 
@@ -68,10 +69,7 @@ router.get('/status', (req, res) => {
 
 // Authentication failure page
 router.get('/failure', (req, res) => {
-    res.status(401).json({
-        error: 'Authentication failed',
-        message: 'OAuth authentication was unsuccessful'
-    });
+    res.sendFile(path.join(__dirname, '../../public/failure.html'));
 });
 
 module.exports = router;
