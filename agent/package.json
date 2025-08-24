@@ -4,6 +4,7 @@
     "description": "MCP Agent Docking System for Agent Dr Girlfriend",
     "main": "src/agent.js",
     "scripts": {
+        "build": "echo 'Building agent...' && npm run build:agent",
         "start": "cross-env NODE_ENV=production node src/agent.js",
         "dev": "cross-env NODE_ENV=development nodemon src/agent.js",
         "dev:direct": "cd js-bambisleep-chat-agent-dr-girlfriend && npm run dev",
