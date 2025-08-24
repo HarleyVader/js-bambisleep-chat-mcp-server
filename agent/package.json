@@ -1,11 +1,14 @@
 {
     "name": "@bambisleep/mcp-agent",
     "version": "1.0.0",
-    "description": "GitHub integration agent for MCP Server docking",
+    "description": "MCP Agent Docking System for Agent Dr Girlfriend",
     "main": "src/agent.js",
     "scripts": {
         "start": "cross-env NODE_ENV=production node src/agent.js",
         "dev": "cross-env NODE_ENV=development nodemon src/agent.js",
+        "dev:direct": "cd js-bambisleep-chat-agent-dr-girlfriend && npm run dev",
+        "install:agent": "cd js-bambisleep-chat-agent-dr-girlfriend && npm install",
+        "build:agent": "cd js-bambisleep-chat-agent-dr-girlfriend && npm run build",
         "test": "jest",
         "test:watch": "jest --watch",
         "lint": "eslint src/ --ext .js",

@@ -206,18 +206,6 @@ function isValidUrl(url) {
 }
 
 /**
- * Sanitize and validate input data
- * @param {Object} data - Data to sanitize
- * @param {string[]} allowedFields - Allowed fields
- * @returns {Object} Sanitized data
- */
-function sanitizeInput(data, allowedFields = []) {
-    if (!data || typeof data !== 'object') return {};
-
-    const sanitized = {};
-    for (const field of allowedFields) {
-        if (data.hasOwnProperty(field)) {
-/**
  * Generic input validation function
  * @param {object} data - Data to validate
  * @param {object} schema - Validation schema with field requirements
@@ -225,7 +213,7 @@ function sanitizeInput(data, allowedFields = []) {
  */
 function validateInput(data, schema) {
     const errors = [];
-    
+
     if (!data || typeof data !== 'object') {
         return {
             isValid: false,
@@ -304,6 +292,18 @@ function validateInput(data, schema) {
     };
 }
 
+/**
+ * Sanitize and validate input data
+ * @param {Object} data - Data to sanitize
+ * @param {string[]} allowedFields - Allowed fields
+ * @returns {Object} Sanitized data
+ */
+function sanitizeInput(data, allowedFields = []) {
+    if (!data || typeof data !== 'object') return {};
+
+    const sanitized = {};
+    for (const field of allowedFields) {
+        if (data.hasOwnProperty(field)) {
             sanitized[field] = data[field];
         }
     }

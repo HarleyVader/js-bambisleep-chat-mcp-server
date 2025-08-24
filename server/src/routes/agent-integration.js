@@ -37,7 +37,7 @@ router.get('/agent-integration', (req, res) => {
 // Proxy endpoint for CORS-free agent access
 router.all('/proxy/*', (req, res) => {
     const targetPath = req.params[0];
-    
+
     // Set CORS headers for agent access
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');

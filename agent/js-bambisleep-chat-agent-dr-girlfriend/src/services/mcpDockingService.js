@@ -232,20 +232,20 @@ class MCPDockingService {
       }
 
       switch (request.type) {
-      case 'RIGHT_TO_ACCESS':
-        return await this.generateDataExport(patronCredentials.bambisleepId);
+        case 'RIGHT_TO_ACCESS':
+          return await this.generateDataExport(patronCredentials.bambisleepId);
 
-      case 'RIGHT_TO_ERASURE':
-        return await this.performSecureErasure(patronCredentials.bambisleepId);
+        case 'RIGHT_TO_ERASURE':
+          return await this.performSecureErasure(patronCredentials.bambisleepId);
 
-      case 'RIGHT_TO_PORTABILITY':
-        return await this.generatePortableData(patronCredentials.bambisleepId);
+        case 'RIGHT_TO_PORTABILITY':
+          return await this.generatePortableData(patronCredentials.bambisleepId);
 
-      case 'RIGHT_TO_RECTIFICATION':
-        return await this.processDataCorrection(request.corrections, patronCredentials.bambisleepId);
+        case 'RIGHT_TO_RECTIFICATION':
+          return await this.processDataCorrection(request.corrections, patronCredentials.bambisleepId);
 
-      default:
-        throw new Error('Unknown data rights request type');
+        default:
+          throw new Error('Unknown data rights request type');
       }
 
     } catch (error) {
@@ -368,7 +368,7 @@ if (typeof window !== 'undefined') {
   if (window.enableRealMCPDocking) {
     mcpService = window.enableRealMCPDocking(mcpService);
   }
-  
+
   // Set up override capability for future use
   window.mcpDockingServiceOverride = (realService) => {
     mcpService = realService;

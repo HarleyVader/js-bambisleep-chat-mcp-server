@@ -13,6 +13,7 @@ npm run dev
 ```
 
 The MCP server will start on `http://localhost:3000` with:
+
 - Austrian-compliant agent docking endpoints
 - GDPR data rights processing
 - Patron verification system
@@ -65,18 +66,21 @@ The server provides these Austrian-compliant endpoints:
 ## Features
 
 ### Austrian GDPR Compliance
+
 - Data minimization principles
 - Right to erasure support
 - Right to portability
 - Austrian audit logging
 
 ### Security Features
+
 - Compartmentalized access (Cold War spy protocols)
 - Time-based credential validation
 - Encrypted data transfers
 - Heartbeat monitoring
 
 ### Development Features
+
 - Hot reloading for both server and agent
 - Detailed logging for debugging
 - CORS configured for local development
@@ -85,23 +89,26 @@ The server provides these Austrian-compliant endpoints:
 ## Troubleshooting
 
 ### Agent Not Connecting
+
 - Ensure MCP server is running on port 3000
 - Check browser console for CORS errors
 - Verify the integration script loads successfully
 
 ### CORS Issues
+
 - Server allows origins: localhost:3004, localhost:3000, localhost:3001
 - Check browser network tab for failed requests
 - Ensure both services are running on HTTP (not HTTPS) for development
 
 ### Service Not Upgrading
+
 - Check browser console for "Real MCP Docking Service" messages
 - Verify the integration script loads before the agent app
 - Ensure server static files are accessible at `/static/`
 
 ## Architecture
 
-```
+```text
 ┌─────────────────┐    HTTP/JSON    ┌──────────────────┐
 │  Agent Dr GF    │ ────────────── │  MCP Server      │
 │  (Port 3004)    │    Austrian     │  (Port 3000)     │

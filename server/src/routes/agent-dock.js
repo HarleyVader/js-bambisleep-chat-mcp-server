@@ -21,9 +21,9 @@ const ensureAustrianCompliance = (req, res, next) => {
     // Check if request meets Austrian GDPR standards
     const requiredHeaders = ['content-type', 'user-agent'];
     const hasRequiredHeaders = requiredHeaders.every(header => req.headers[header]);
-    
+
     if (!hasRequiredHeaders) {
-        return res.status(400).json({ 
+        return res.status(400).json({
             error: 'Request does not meet Austrian compliance standards',
             code: 'AUSTRIAN_COMPLIANCE_VIOLATION'
         });
@@ -49,10 +49,10 @@ function logAustrianComplianceEvent(eventType, data) {
         data,
         auditId: crypto.randomBytes(16).toString('hex')
     };
-    
+
     austrianComplianceLog.push(event);
     console.log(`🇦🇹 Austrian Audit: ${eventType}`, data);
-    
+
     // Keep only last 1000 events to comply with data minimization
     if (austrianComplianceLog.length > 1000) {
         austrianComplianceLog.shift();
@@ -145,7 +145,7 @@ router.post('/:dockId/patron/verify', ensureAustrianCompliance, async (req, res)
 
         const dockSession = activeAgentDocks.get(dockId);
         if (!dockSession) {
-            return res.status(404).json({ 
+            return res.status(404).json({
                 error: 'Dock session not found',
                 code: 'DOCK_NOT_FOUND'
             });
@@ -233,7 +233,7 @@ router.post('/:dockId/deposit', ensureAustrianCompliance, async (req, res) => {
 
         const dockSession = activeAgentDocks.get(dockId);
         if (!dockSession) {
-            return res.status(404).json({ 
+            return res.status(404).json({
                 error: 'Dock session not found',
                 code: 'DOCK_NOT_FOUND'
             });
@@ -294,7 +294,7 @@ router.post('/:dockId/gdpr', ensureAustrianCompliance, async (req, res) => {
 
         const dockSession = activeAgentDocks.get(dockId);
         if (!dockSession) {
-            return res.status(404).json({ 
+            return res.status(404).json({
                 error: 'Dock session not found',
                 code: 'DOCK_NOT_FOUND'
             });
@@ -373,7 +373,7 @@ router.post('/:dockId/heartbeat', ensureAustrianCompliance, (req, res) => {
     const dockSession = activeAgentDocks.get(dockId);
 
     if (!dockSession) {
-        return res.status(404).json({ 
+        return res.status(404).json({
             error: 'Dock session not found',
             code: 'DOCK_NOT_FOUND'
         });
