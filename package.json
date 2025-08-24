@@ -1,0 +1,44 @@
+{
+    "name": "js-bambisleep-chat-mcp-server",
+    "version": "1.0.0",
+    "description": "MCP Server & Agent Docking System",
+    "main": "index.js",
+    "private": true,
+    "workspaces": [
+        "server",
+        "agent",
+        "shared"
+    ],
+    "scripts": {
+        "dev": "concurrently \"npm run dev:server\" \"npm run dev:agent\"",
+        "dev:server": "cd server && npm run dev",
+        "dev:agent": "cd agent && npm run dev",
+        "build": "npm run build --workspaces",
+        "test": "npm run test --workspaces",
+        "lint": "eslint . --ext .js,.ts",
+        "lint:fix": "eslint . --ext .js,.ts --fix",
+        "format": "prettier --write .",
+        "clean": "rimraf node_modules server/node_modules agent/node_modules shared/node_modules"
+    },
+    "devDependencies": {
+        "concurrently": "^8.2.2",
+        "cross-env": "^7.0.3",
+        "eslint": "^8.57.0",
+        "prettier": "^3.2.5",
+        "rimraf": "^5.0.5",
+        "husky": "^8.0.3"
+    },
+    "engines": {
+        "node": ">=18.0.0",
+        "npm": ">=8.0.0"
+    },
+    "keywords": [
+        "mcp",
+        "model-context-protocol",
+        "github",
+        "oauth",
+        "docker"
+    ],
+    "author": "",
+    "license": "MIT"
+}
