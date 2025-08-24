@@ -88,14 +88,37 @@ const validateGitHubOperation = ajv.compile(githubOperationSchema);
  * @returns {Object} Validation result
  */
 function validateUserObject(user) {
-    const isValid = validateUser(user);
-
-    // Additional email validation
-    if (user.email && !isValidEmail(user.email)) {
+    if (!user || typeof user !== 'object') {
         return {
             isValid: false,
-            errors: [{ message: 'Invalid email format' }]
+            errors: [{ message: 'User object is required and must be an object' }]
         };
+    }
+
+    const isValid = validateUser(user);
+
+    if (!isValid) {
+        return {
+            isValid: false,
+            errors: validateUser.errors || [{ message: 'Validation failed' }]
+        };
+    }
+
+    // Additional email validation with try-catch
+    if (user.email) {
+        try {
+            if (!isValidEmail(user.email)) {
+                return {
+                    isValid: false,
+                    errors: [{ message: 'Invalid email format' }]
+                };
+            }
+        } catch (error) {
+            return {
+                isValid: false,
+                errors: [{ message: 'Email validation error', details: error.message }]
+            };
+        }
     }
 
     return {

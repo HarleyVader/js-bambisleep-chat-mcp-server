@@ -5,12 +5,64 @@ const router = express.Router();
 // Store active dock sessions
 const activeDocks = new Map();
 
-// Middleware to check authentication
-const ensureAuthenticated = (req, res, next) => {
-    if (req.isAuthenticated()) {
-        return next();
+// Cleanup expired dock sessions (prevent memory leaks)
+const DOCK_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+const cleanupExpiredDocks = () => {
+    const now = Date.now();
+    for (const [dockId, dock] of activeDocks.entries()) {
+        const lastActivity = new Date(dock.lastHeartbeat).getTime();
+        if (now - lastActivity > DOCK_TIMEOUT) {
+            console.log(`🧹 Cleaning up expired dock session: ${dockId}`);
+            activeDocks.delete(dockId);
+        }
     }
-    res.status(401).json({ error: 'Authentication required for docking operations' });
+};
+
+// Run cleanup every 10 minutes
+setInterval(cleanupExpiredDocks, 10 * 60 * 1000);
+
+// Enhanced middleware to check authentication with session validation
+const ensureAuthenticated = (req, res, next) => {
+    if (!req.isAuthenticated()) {
+        return res.status(401).json({
+            error: 'Authentication required for docking operations',
+            code: 'AUTHENTICATION_REQUIRED'
+        });
+    }
+
+    // Additional session validation
+    if (!req.user || !req.user.id) {
+        return res.status(401).json({
+            error: 'Invalid user session',
+            code: 'INVALID_SESSION'
+        });
+    }
+
+    // Check session expiry if available
+    if (req.session && req.session.cookie && req.session.cookie.expires) {
+        if (new Date() > new Date(req.session.cookie.expires)) {
+            return res.status(401).json({
+                error: 'Session expired',
+                code: 'SESSION_EXPIRED'
+            });
+        }
+    }
+
+    return next();
+};
+
+// Input validation helper
+const validateInput = (input, type = 'string', maxLength = 255) => {
+    if (typeof input !== type) {
+        return false;
+    }
+    if (type === 'string' && (input.length === 0 || input.length > maxLength)) {
+        return false;
+    }
+    if (type === 'string' && !/^[a-zA-Z0-9_-]+$/.test(input)) {
+        return false;
+    }
+    return true;
 };
 
 // Initiate docking process
@@ -18,8 +70,31 @@ router.post('/', ensureAuthenticated, async (req, res) => {
     try {
         const { agentId, capabilities, metadata } = req.body;
 
-        if (!agentId) {
-            return res.status(400).json({ error: 'Agent ID is required' });
+        // Enhanced input validation
+        if (!agentId || !validateInput(agentId, 'string', 100)) {
+            return res.status(400).json({
+                error: 'Agent ID is required and must be a valid alphanumeric string (max 100 chars)',
+                code: 'INVALID_AGENT_ID'
+            });
+        }
+
+        // Validate capabilities array if provided
+        if (capabilities && (!Array.isArray(capabilities) || capabilities.length > 50)) {
+            return res.status(400).json({
+                error: 'Capabilities must be an array with maximum 50 items',
+                code: 'INVALID_CAPABILITIES'
+            });
+        }
+
+        // Validate metadata size if provided
+        if (metadata && typeof metadata === 'object') {
+            const metadataStr = JSON.stringify(metadata);
+            if (metadataStr.length > 10000) {
+                return res.status(400).json({
+                    error: 'Metadata size too large (max 10KB)',
+                    code: 'METADATA_TOO_LARGE'
+                });
+            }
         }
 
         // Generate handshake token

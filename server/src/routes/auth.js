@@ -1,6 +1,7 @@
 const express = require('express');
 const passport = require('passport');
 const path = require('path');
+const crypto = require('crypto');
 const router = express.Router();
 
 // Middleware to check if user is authenticated
@@ -18,17 +19,6 @@ router.get('/github', passport.authenticate('github', {
 
 router.get('/github/callback',
     passport.authenticate('github', { failureRedirect: '/auth/failure' }),
-    (req, res) => {
-        // Successful authentication
-        res.redirect(process.env.CLIENT_SUCCESS_REDIRECT || '/dashboard');
-    }
-);
-
-// Patreon OAuth routes
-router.get('/patreon', passport.authenticate('patreon'));
-
-router.get('/patreon/callback',
-    passport.authenticate('patreon', { failureRedirect: '/auth/failure' }),
     (req, res) => {
         // Successful authentication
         res.redirect(process.env.CLIENT_SUCCESS_REDIRECT || '/dashboard');

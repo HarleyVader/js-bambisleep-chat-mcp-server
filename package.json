@@ -7,23 +7,17 @@
     "workspaces": [
         "server",
         "agent",
-        "shared"
+        "shared",
+        "patreon"
     ],
     "scripts": {
+        "build": "npm install --workspaces && npm run build --workspaces && npx cpx \"agent/js-bambisleep-chat-agent-dr-girlfriend/dist/**/*\" \"server/public/agent-app/\" && npx cpx \"patreon/dist/**/*\" \"server/public/patreon/\"",
         "start": "cd server && npm start",
-        "dev": "concurrently \"npm run dev:server\" \"npm run dev:agent\"",
-        "dev:server": "cd server && npm run dev",
-        "dev:agent": "cd agent/js-bambisleep-chat-agent-dr-girlfriend && npm run dev",
-        "build": "npm run build:agent && cd server && npm run build",
-        "build:agent": "cd agent/js-bambisleep-chat-agent-dr-girlfriend && npm run build"
+        "install-all": "npm install --workspaces --include-workspace-root",
+        "postinstall": "echo 'Root package installed successfully'"
     },
     "devDependencies": {
-        "concurrently": "^8.2.2",
-        "cross-env": "^7.0.3",
-        "eslint": "^8.57.0",
-        "prettier": "^3.2.5",
-        "rimraf": "^5.0.5",
-        "husky": "^8.0.3"
+        "cpx": "^1.2.1"
     },
     "engines": {
         "node": ">=18.0.0",

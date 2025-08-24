@@ -11,11 +11,21 @@ const passport = require('passport');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 
+// Security imports
+const crypto = require('crypto');
+
 const authRoutes = require('./routes/auth');
 const mcpRoutes = require('./routes/mcp');
 const dockRoutes = require('./routes/dock');
 const agentDockRoutes = require('./routes/agent-dock');
 const agentIntegrationRoutes = require('./routes/agent-integration');
+const patreonRoutes = require('./routes/patreon');
+
+// Import Patreon services
+const { PatreonOAuth, PatreonAPIClient, PatreonWebhookHandler, createWebhookMiddleware } = require('./patreon');
+
+// Import Patreon Process Manager
+const PatreonProcessManager = require('./services/patreon-process-manager');
 
 const app = express();
 const server = createServer(app);
@@ -74,7 +84,10 @@ app.use(session({
     cookie: {
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
-        maxAge: parseInt(process.env.SESSION_MAX_AGE) || 24 * 60 * 60 * 1000 // 24 hours
+        maxAge: (() => {
+            const maxAge = parseInt(process.env.SESSION_MAX_AGE, 10);
+            return !isNaN(maxAge) && maxAge > 0 ? maxAge : 24 * 60 * 60 * 1000; // 24 hours default
+        })()
     }
 }));
 
@@ -82,8 +95,93 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+// CSRF Protection for state-changing operations
+const generateCSRFToken = () => crypto.randomBytes(32).toString('hex');
+
+app.use((req, res, next) => {
+    // Skip CSRF for GET requests, webhooks, and socket.io
+    if (req.method === 'GET' ||
+        req.path.startsWith('/webhooks/') ||
+        req.path.startsWith('/socket.io/') ||
+        req.path.startsWith('/auth/')) {
+        return next();
+    }
+
+    // Generate CSRF token for session if not exists
+    if (req.session && !req.session.csrfToken) {
+        req.session.csrfToken = generateCSRFToken();
+    }
+
+    // Validate CSRF token for state-changing operations
+    const token = req.headers['x-csrf-token'] || req.body._csrf;
+    if (req.session && req.session.csrfToken && token !== req.session.csrfToken) {
+        return res.status(403).json({
+            error: 'CSRF token validation failed',
+            code: 'CSRF_TOKEN_INVALID'
+        });
+    }
+
+    next();
+});
+
+// Endpoint to get CSRF token
+app.get('/api/csrf-token', (req, res) => {
+    if (!req.session.csrfToken) {
+        req.session.csrfToken = generateCSRFToken();
+    }
+    res.json({ csrfToken: req.session.csrfToken });
+});
+
 // Initialize passport strategies
 require('./auth/strategies');
+
+// Initialize Patreon services
+const patreonOAuth = new PatreonOAuth({
+    clientId: process.env.PATREON_CLIENT_ID,
+    clientSecret: process.env.PATREON_CLIENT_SECRET,
+    redirectUri: process.env.PATREON_REDIRECT_URI || 'https://fickdichselber.com/auth/patreon/callback',
+    userAgent: process.env.PATREON_USER_AGENT || 'BambiSleep-Chat-Patreon/1.0.0'
+});
+
+const webhookHandler = new PatreonWebhookHandler({
+    secret: process.env.PATREON_WEBHOOK_SECRET || 'default-secret'
+});
+
+// Setup webhook event handlers
+webhookHandler.on('members:create', async (event) => {
+    console.log('📨 New member created:', event.data);
+    // Emit to socket.io clients
+    io.emit('patreon:member:create', event.data);
+});
+
+webhookHandler.on('members:update', async (event) => {
+    console.log('📨 Member updated:', event.data);
+    io.emit('patreon:member:update', event.data);
+});
+
+webhookHandler.on('members:delete', async (event) => {
+    console.log('📨 Member deleted:', event.data);
+    io.emit('patreon:member:delete', event.data);
+});
+
+webhookHandler.on('members:pledge:create', async (event) => {
+    console.log('📨 New pledge created:', event.data);
+    io.emit('patreon:pledge:create', event.data);
+});
+
+webhookHandler.on('members:pledge:update', async (event) => {
+    console.log('📨 Pledge updated:', event.data);
+    io.emit('patreon:pledge:update', event.data);
+});
+
+webhookHandler.on('members:pledge:delete', async (event) => {
+    console.log('📨 Pledge deleted:', event.data);
+    io.emit('patreon:pledge:delete', event.data);
+});
+
+// Store Patreon services in app locals
+app.locals.patreonOAuth = patreonOAuth;
+app.locals.webhookHandler = webhookHandler;
 
 // Routes
 app.use('/auth', authRoutes);
@@ -91,6 +189,896 @@ app.use('/api/mcp', mcpRoutes);
 app.use('/api/dock', dockRoutes);
 app.use('/api/agent-dock', agentDockRoutes);
 app.use('/agent', agentIntegrationRoutes);
+app.use('/api/patreon', patreonRoutes);
+
+// Patreon OAuth routes
+app.get('/auth/patreon', (req, res) => {
+    const scopes = ['identity', 'campaigns', 'campaigns.members'];
+    const authUrl = patreonOAuth.getAuthorizationUrl(scopes);
+    res.redirect(authUrl);
+});
+
+app.get('/auth/patreon/callback', async (req, res) => {
+    try {
+        const { code, error, error_description } = req.query;
+
+        // Handle OAuth errors
+        if (error) {
+            const errorMessage = error_description || 'OAuth authentication failed';
+            return res.status(400).send(`
+                <!DOCTYPE html>
+                <html lang="en" class="cyber-terminal">
+                <head>
+                    <title>🚨 AUTHENTICATION FAILED 🚨</title>
+                    <style>
+                        :root {
+                            /* FICKDICHSELBER.COM NEON CYBER GOTH WAVE PALETTE */
+                            --primary-color: #0c2a2ac9;
+                            --primary-alt: #15aab5ec;
+                            --secondary-color: #40002f;
+                            --secondary-alt: #cc0174;
+                            --tertiary-color: #cc0174;
+                            --tertiary-alt: #01c69eae;
+                            --button-color: #df0471;
+                            --button-alt: #110000;
+                            --nav-color: #0a2626;
+                            --nav-alt: #17dbd8;
+                            --error: #ff3333;
+                            --error-bg: rgba(255, 51, 51, 0.1);
+
+                            /* RGB values for alpha compositing */
+                            --primary-color-rgb: 12, 42, 42;
+                            --secondary-color-rgb: 64, 0, 47;
+                            --tertiary-color-rgb: 204, 1, 116;
+                            --nav-color-rgb: 10, 38, 38;
+                            --button-color-rgb: 223, 4, 113;
+                            --error-rgb: 255, 51, 51;
+                        }
+
+                        @import url("https://fonts.googleapis.com/css2?family=Audiowide&family=Fira+Code:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap");
+
+                        * {
+                            margin: 0;
+                            padding: 0;
+                            box-sizing: border-box;
+                        }
+
+                        body {
+                            font-family: 'Audiowide', 'JetBrains Mono', 'Fira Code', monospace;
+                            background: var(--button-alt);
+                            color: var(--primary-alt);
+                            min-height: 100vh;
+                            display: flex;
+                            flex-direction: column;
+                            justify-content: center;
+                            align-items: center;
+                            position: relative;
+                            overflow-x: hidden;
+                        }
+
+                        /* Error scanlines effect */
+                        body::before {
+                            content: '';
+                            position: fixed;
+                            top: 0;
+                            left: 0;
+                            width: 100vw;
+                            height: 100vh;
+                            background: repeating-linear-gradient(0deg,
+                                transparent,
+                                transparent 2px,
+                                rgba(var(--error-rgb), 0.05) 2px,
+                                rgba(var(--error-rgb), 0.05) 4px);
+                            pointer-events: none;
+                            z-index: 1000;
+                            animation: error-scanlines 0.1s linear infinite;
+                        }
+
+                        @keyframes error-scanlines {
+                            0% { transform: translateY(0); }
+                            100% { transform: translateY(4px); }
+                        }
+
+                        .container {
+                            max-width: 600px;
+                            padding: 2rem;
+                            text-align: center;
+                            background: var(--error-bg);
+                            border: 2px solid var(--error);
+                            border-radius: 10px;
+                            box-shadow: 0 0 30px var(--error), 0 0 60px var(--error);
+                            position: relative;
+                            z-index: 10;
+                        }
+
+                        .error-icon {
+                            font-size: 4rem;
+                            color: var(--error);
+                            margin-bottom: 1rem;
+                            animation: error-pulse 1s ease-in-out infinite alternate;
+                        }
+
+                        @keyframes error-pulse {
+                            from {
+                                text-shadow: 0 0 20px var(--error);
+                                transform: scale(1);
+                            }
+                            to {
+                                text-shadow: 0 0 40px var(--error), 0 0 60px var(--error);
+                                transform: scale(1.1);
+                            }
+                        }
+
+                        .title {
+                            font-size: 2rem;
+                            color: var(--error);
+                            text-shadow: 0 0 20px var(--error);
+                            margin-bottom: 1rem;
+                        }
+
+                        .message {
+                            font-size: 1.1rem;
+                            color: var(--primary-alt);
+                            margin-bottom: 2rem;
+                            line-height: 1.6;
+                        }
+
+                        .error-details {
+                            background: rgba(var(--secondary-color-rgb), 0.2);
+                            border: 1px solid var(--secondary-color);
+                            border-radius: 5px;
+                            padding: 1rem;
+                            margin: 1rem 0;
+                            font-family: 'JetBrains Mono', monospace;
+                        }
+
+                        .btn {
+                            padding: 1rem 2rem;
+                            font-size: 1.1rem;
+                            font-family: inherit;
+                            border: 2px solid;
+                            border-radius: 5px;
+                            cursor: pointer;
+                            text-decoration: none;
+                            display: inline-block;
+                            transition: all 0.3s ease;
+                            text-transform: uppercase;
+                            letter-spacing: 1px;
+                            margin: 0.5rem;
+                        }
+
+                        .btn-primary {
+                            background: var(--tertiary-color);
+                            color: white;
+                            border-color: var(--tertiary-color);
+                            box-shadow: 0 0 20px rgba(var(--tertiary-color-rgb), 0.5);
+                        }
+
+                        .btn-primary:hover {
+                            background: var(--secondary-alt);
+                            border-color: var(--secondary-alt);
+                            box-shadow: 0 0 30px var(--secondary-alt);
+                            transform: translateY(-2px);
+                        }
+
+                        .btn-secondary {
+                            background: transparent;
+                            color: var(--nav-alt);
+                            border-color: var(--nav-alt);
+                            box-shadow: 0 0 20px rgba(var(--nav-color-rgb), 0.5);
+                        }
+
+                        .btn-secondary:hover {
+                            background: var(--nav-alt);
+                            color: var(--button-alt);
+                            box-shadow: 0 0 30px var(--nav-alt);
+                            transform: translateY(-2px);
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="error-icon">🚨</div>
+                        <h1 class="title">AUTHENTICATION FAILED</h1>
+
+                        <div class="message">
+                            <p>Oops! Something went wrong during the OAuth process.</p>
+                        </div>
+
+                        <div class="error-details">
+                            <p><strong>Error:</strong> ${error}</p>
+                            <p><strong>Description:</strong> ${errorMessage}</p>
+                        </div>
+
+                        <div>
+                            <a href="/" class="btn btn-secondary">← Back to Home</a>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `);
+        }
+
+        if (!code || typeof code !== 'string') {
+            return res.status(400).send(`
+                <!DOCTYPE html>
+                <html lang="en" class="cyber-terminal">
+                <head>
+                    <title>🚨 MISSING AUTH CODE 🚨</title>
+                    <style>
+                        :root {
+                            /* FICKDICHSELBER.COM NEON CYBER GOTH WAVE PALETTE */
+                            --primary-color: #0c2a2ac9;
+                            --primary-alt: #15aab5ec;
+                            --secondary-color: #40002f;
+                            --secondary-alt: #cc0174;
+                            --tertiary-color: #cc0174;
+                            --tertiary-alt: #01c69eae;
+                            --button-color: #df0471;
+                            --button-alt: #110000;
+                            --nav-color: #0a2626;
+                            --nav-alt: #17dbd8;
+                            --error: #ff3333;
+                            --error-bg: rgba(255, 51, 51, 0.1);
+
+                            /* RGB values for alpha compositing */
+                            --primary-color-rgb: 12, 42, 42;
+                            --secondary-color-rgb: 64, 0, 47;
+                            --tertiary-color-rgb: 204, 1, 116;
+                            --nav-color-rgb: 10, 38, 38;
+                            --button-color-rgb: 223, 4, 113;
+                            --error-rgb: 255, 51, 51;
+                        }
+
+                        @import url("https://fonts.googleapis.com/css2?family=Audiowide&family=Fira+Code:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap");
+
+                        * {
+                            margin: 0;
+                            padding: 0;
+                            box-sizing: border-box;
+                        }
+
+                        body {
+                            font-family: 'Audiowide', 'JetBrains Mono', 'Fira Code', monospace;
+                            background: var(--button-alt);
+                            color: var(--primary-alt);
+                            min-height: 100vh;
+                            display: flex;
+                            flex-direction: column;
+                            justify-content: center;
+                            align-items: center;
+                            position: relative;
+                            overflow-x: hidden;
+                        }
+
+                        /* Error scanlines effect */
+                        body::before {
+                            content: '';
+                            position: fixed;
+                            top: 0;
+                            left: 0;
+                            width: 100vw;
+                            height: 100vh;
+                            background: repeating-linear-gradient(0deg,
+                                transparent,
+                                transparent 2px,
+                                rgba(var(--error-rgb), 0.05) 2px,
+                                rgba(var(--error-rgb), 0.05) 4px);
+                            pointer-events: none;
+                            z-index: 1000;
+                            animation: error-scanlines 0.1s linear infinite;
+                        }
+
+                        @keyframes error-scanlines {
+                            0% { transform: translateY(0); }
+                            100% { transform: translateY(4px); }
+                        }
+
+                        .container {
+                            max-width: 600px;
+                            padding: 2rem;
+                            text-align: center;
+                            background: var(--error-bg);
+                            border: 2px solid var(--error);
+                            border-radius: 10px;
+                            box-shadow: 0 0 30px var(--error), 0 0 60px var(--error);
+                            position: relative;
+                            z-index: 10;
+                        }
+
+                        .error-icon {
+                            font-size: 4rem;
+                            color: var(--error);
+                            margin-bottom: 1rem;
+                            animation: error-pulse 1s ease-in-out infinite alternate;
+                        }
+
+                        @keyframes error-pulse {
+                            from {
+                                text-shadow: 0 0 20px var(--error);
+                                transform: scale(1);
+                            }
+                            to {
+                                text-shadow: 0 0 40px var(--error), 0 0 60px var(--error);
+                                transform: scale(1.1);
+                            }
+                        }
+
+                        .title {
+                            font-size: 2rem;
+                            color: var(--error);
+                            text-shadow: 0 0 20px var(--error);
+                            margin-bottom: 1rem;
+                        }
+
+                        .message {
+                            font-size: 1.1rem;
+                            color: var(--primary-alt);
+                            margin-bottom: 2rem;
+                            line-height: 1.6;
+                        }
+
+                        .btn {
+                            padding: 1rem 2rem;
+                            font-size: 1.1rem;
+                            font-family: inherit;
+                            border: 2px solid;
+                            border-radius: 5px;
+                            cursor: pointer;
+                            text-decoration: none;
+                            display: inline-block;
+                            transition: all 0.3s ease;
+                            text-transform: uppercase;
+                            letter-spacing: 1px;
+                            margin: 0.5rem;
+                        }
+
+                        .btn-primary {
+                            background: var(--tertiary-color);
+                            color: white;
+                            border-color: var(--tertiary-color);
+                            box-shadow: 0 0 20px rgba(var(--tertiary-color-rgb), 0.5);
+                        }
+
+                        .btn-primary:hover {
+                            background: var(--secondary-alt);
+                            border-color: var(--secondary-alt);
+                            box-shadow: 0 0 30px var(--secondary-alt);
+                            transform: translateY(-2px);
+                        }
+
+                        .btn-secondary {
+                            background: transparent;
+                            color: var(--nav-alt);
+                            border-color: var(--nav-alt);
+                            box-shadow: 0 0 20px rgba(var(--nav-color-rgb), 0.5);
+                        }
+
+                        .btn-secondary:hover {
+                            background: var(--nav-alt);
+                            color: var(--button-alt);
+                            box-shadow: 0 0 30px var(--nav-alt);
+                            transform: translateY(-2px);
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="error-icon">🚨</div>
+                        <h1 class="title">MISSING AUTHORIZATION CODE</h1>
+
+                        <div class="message">
+                            <p>The OAuth callback is missing the required authorization code.</p>
+                            <p>This could happen if the authorization was cancelled or there was a technical issue.</p>
+                        </div>
+
+                        <div>
+                            <a href="/auth/patreon" class="btn btn-primary">🔄 Try Again</a>
+                            <a href="/" class="btn btn-secondary">← Back to Home</a>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `);
+        }
+
+        const tokens = await patreonOAuth.getTokens(code);
+
+        // Create API client with the new tokens
+        const apiClient = new PatreonAPIClient({
+            accessToken: tokens.access_token,
+            userAgent: process.env.PATREON_USER_AGENT || 'BambiSleep-Chat-Patreon/1.0.0'
+        });
+
+        // Get user info
+        const user = await apiClient.getCurrentUser();
+        const userData = Array.isArray(user.data) ? user.data[0] : user.data;
+
+        if (!userData) {
+            throw new Error('No user data received from Patreon API');
+        }
+
+        // Store user session data
+        req.session.patreonTokens = tokens;
+        req.session.patreonUser = userData;
+
+        // Success page
+        return res.send(`
+            <!DOCTYPE html>
+            <html lang="en" class="cyber-terminal">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>🌸 BAMBI PATREON SUCCESS 🌸</title>
+                <style>
+                    :root {
+                        /* FICKDICHSELBER.COM NEON CYBER GOTH WAVE PALETTE */
+                        --primary-color: #0c2a2ac9;
+                        --primary-alt: #15aab5ec;
+                        --secondary-color: #40002f;
+                        --secondary-alt: #cc0174;
+                        --tertiary-color: #cc0174;
+                        --tertiary-alt: #01c69eae;
+                        --button-color: #df0471;
+                        --button-alt: #110000;
+                        --nav-color: #0a2626;
+                        --nav-alt: #17dbd8;
+                        --transparent: #124141ce;
+                        --success: #01c69eae;
+
+                        /* RGB values for alpha compositing */
+                        --primary-color-rgb: 12, 42, 42;
+                        --secondary-color-rgb: 64, 0, 47;
+                        --tertiary-color-rgb: 204, 1, 116;
+                        --nav-color-rgb: 10, 38, 38;
+                        --button-color-rgb: 223, 4, 113;
+                        --success-rgb: 1, 198, 158;
+                    }
+
+                    @import url("https://fonts.googleapis.com/css2?family=Audiowide&family=Fira+Code:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap");
+
+                    * {
+                        margin: 0;
+                        padding: 0;
+                        box-sizing: border-box;
+                    }
+
+                    body {
+                        font-family: 'Audiowide', 'JetBrains Mono', 'Fira Code', monospace;
+                        background: var(--button-alt);
+                        color: var(--primary-alt);
+                        min-height: 100vh;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                        align-items: center;
+                        position: relative;
+                        overflow-x: hidden;
+                    }
+
+                    /* Cyber terminal scanlines effect */
+                    body::before {
+                        content: '';
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100vw;
+                        height: 100vh;
+                        background: repeating-linear-gradient(0deg,
+                            transparent,
+                            transparent 2px,
+                            rgba(var(--success-rgb), 0.03) 2px,
+                            rgba(var(--success-rgb), 0.03) 4px);
+                        pointer-events: none;
+                        z-index: 1000;
+                        animation: success-scanlines 0.1s linear infinite;
+                    }
+
+                    @keyframes success-scanlines {
+                        0% { transform: translateY(0); }
+                        100% { transform: translateY(4px); }
+                    }
+
+                    .container {
+                        max-width: 800px;
+                        padding: 2rem;
+                        text-align: center;
+                        background: rgba(var(--primary-color-rgb), 0.2);
+                        border: 2px solid var(--success);
+                        border-radius: 10px;
+                        box-shadow: 0 0 30px var(--success), 0 0 60px var(--success);
+                        position: relative;
+                        z-index: 10;
+                    }
+
+                    .success-icon {
+                        font-size: 4rem;
+                        color: var(--success);
+                        margin-bottom: 1rem;
+                        animation: success-pulse 2s ease-in-out infinite alternate;
+                    }
+
+                    @keyframes success-pulse {
+                        from {
+                            text-shadow: 0 0 20px var(--success);
+                            transform: scale(1);
+                        }
+                        to {
+                            text-shadow: 0 0 40px var(--success), 0 0 60px var(--success);
+                            transform: scale(1.1);
+                        }
+                    }
+
+                    .title {
+                        font-size: 2rem;
+                        color: var(--success);
+                        text-shadow: 0 0 20px var(--success);
+                        margin-bottom: 1rem;
+                        animation: glow-pulse 2s ease-in-out infinite alternate;
+                    }
+
+                    @keyframes glow-pulse {
+                        from { text-shadow: 0 0 20px var(--success); }
+                        to { text-shadow: 0 0 30px var(--success), 0 0 40px var(--success); }
+                    }
+
+                    .subtitle {
+                        font-size: 1.2rem;
+                        color: var(--nav-alt);
+                        margin-bottom: 2rem;
+                        text-shadow: 0 0 10px var(--nav-alt);
+                    }
+
+                    .user-info {
+                        background: rgba(var(--secondary-color-rgb), 0.2);
+                        border: 1px solid var(--secondary-color);
+                        border-radius: 10px;
+                        padding: 1.5rem;
+                        margin: 1.5rem 0;
+                        color: var(--primary-alt);
+                    }
+
+                    .user-info h3 {
+                        color: var(--tertiary-color);
+                        text-shadow: 0 0 10px var(--tertiary-color);
+                        margin-bottom: 1rem;
+                    }
+
+                    .user-info p {
+                        margin: 0.5rem 0;
+                        font-family: 'JetBrains Mono', monospace;
+                    }
+
+                    .btn {
+                        padding: 1rem 2rem;
+                        font-size: 1.1rem;
+                        font-family: inherit;
+                        border: 2px solid;
+                        border-radius: 5px;
+                        cursor: pointer;
+                        text-decoration: none;
+                        display: inline-block;
+                        transition: all 0.3s ease;
+                        text-transform: uppercase;
+                        letter-spacing: 1px;
+                        margin: 0.5rem;
+                        position: relative;
+                        overflow: hidden;
+                    }
+
+                    .btn-dashboard {
+                        background: var(--nav-alt);
+                        color: var(--button-alt);
+                        border-color: var(--nav-alt);
+                        box-shadow: 0 0 20px rgba(var(--nav-color-rgb), 0.5);
+                    }
+
+                    .btn-dashboard:hover {
+                        background: var(--nav-color);
+                        color: var(--nav-alt);
+                        box-shadow: 0 0 30px var(--nav-alt);
+                        transform: translateY(-2px);
+                    }
+
+                    .btn-terminal {
+                        background: var(--tertiary-color);
+                        color: white;
+                        border-color: var(--tertiary-color);
+                        box-shadow: 0 0 20px rgba(var(--tertiary-color-rgb), 0.5);
+                    }
+
+                    .btn-terminal:hover {
+                        background: var(--secondary-alt);
+                        border-color: var(--secondary-alt);
+                        box-shadow: 0 0 30px var(--secondary-alt);
+                        transform: translateY(-2px);
+                    }
+
+                    .countdown {
+                        margin-top: 2rem;
+                        font-size: 0.9rem;
+                        color: var(--nav-alt);
+                        opacity: 0.8;
+                    }
+
+                    /* Glitch effect for title */
+                    .glitch {
+                        position: relative;
+                    }
+
+                    .glitch::before,
+                    .glitch::after {
+                        content: attr(data-text);
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                    }
+
+                    .glitch::before {
+                        animation: glitch-1 2s infinite;
+                        color: var(--nav-alt);
+                        z-index: -1;
+                    }
+
+                    .glitch::after {
+                        animation: glitch-2 2s infinite;
+                        color: var(--secondary-alt);
+                        z-index: -2;
+                    }
+
+                    @keyframes glitch-1 {
+                        0%, 14%, 15%, 49%, 50%, 99%, 100% {
+                            transform: translate(0);
+                        }
+                        15%, 49% {
+                            transform: translate(-2px, 2px);
+                        }
+                    }
+
+                    @keyframes glitch-2 {
+                        0%, 20%, 21%, 62%, 63%, 99%, 100% {
+                            transform: translate(0);
+                        }
+                        21%, 62% {
+                            transform: translate(2px, -2px);
+                        }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="success-icon">✅</div>
+                    <h1 class="title glitch" data-text="🌸 PATREON AUTH SUCCESS 🌸">🌸 PATREON AUTH SUCCESS 🌸</h1>
+                    <p class="subtitle">Welcome to BambiSleep Chat, ${userData.attributes?.full_name || 'Patron'}!</p>
+
+                    <div class="user-info">
+                        <h3>👤 Your Profile</h3>
+                        <p><strong>Name:</strong> ${userData.attributes?.full_name || 'Not provided'}</p>
+                        <p><strong>Patreon ID:</strong> ${userData.id}</p>
+                        <p><strong>Email:</strong> ${userData.attributes?.email || 'Not provided'}</p>
+                    </div>
+
+                    <div>
+                        <a href="/dashboard" class="btn btn-dashboard">🏠 Go to Dashboard</a>
+                        <a href="/terminal" class="btn btn-terminal">💬 Open Chat Terminal</a>
+                    </div>
+
+                    <div class="countdown">
+                        <p>Auto-redirecting to dashboard in 3 seconds...</p>
+                    </div>
+                </div>
+                <script>
+                    // Auto-redirect to dashboard after 3 seconds
+                    setTimeout(() => {
+                        window.location.href = '/dashboard';
+                    }, 3000);
+                </script>
+            </body>
+            </html>
+        `);
+    } catch (error) {
+        console.error('Patreon OAuth callback error:', error);
+        return res.status(500).send(`
+            <!DOCTYPE html>
+            <html lang="en" class="cyber-terminal">
+            <head>
+                <title>🚨 AUTHENTICATION ERROR 🚨</title>
+                <style>
+                    :root {
+                        /* FICKDICHSELBER.COM NEON CYBER GOTH WAVE PALETTE */
+                        --primary-color: #0c2a2ac9;
+                        --primary-alt: #15aab5ec;
+                        --secondary-color: #40002f;
+                        --secondary-alt: #cc0174;
+                        --tertiary-color: #cc0174;
+                        --tertiary-alt: #01c69eae;
+                        --button-color: #df0471;
+                        --button-alt: #110000;
+                        --nav-color: #0a2626;
+                        --nav-alt: #17dbd8;
+                        --error: #ff3333;
+                        --error-bg: rgba(255, 51, 51, 0.1);
+
+                        /* RGB values for alpha compositing */
+                        --primary-color-rgb: 12, 42, 42;
+                        --secondary-color-rgb: 64, 0, 47;
+                        --tertiary-color-rgb: 204, 1, 116;
+                        --nav-color-rgb: 10, 38, 38;
+                        --button-color-rgb: 223, 4, 113;
+                        --error-rgb: 255, 51, 51;
+                    }
+
+                    @import url("https://fonts.googleapis.com/css2?family=Audiowide&family=Fira+Code:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap");
+
+                    * {
+                        margin: 0;
+                        padding: 0;
+                        box-sizing: border-box;
+                    }
+
+                    body {
+                        font-family: 'Audiowide', 'JetBrains Mono', 'Fira Code', monospace;
+                        background: var(--button-alt);
+                        color: var(--primary-alt);
+                        min-height: 100vh;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                        align-items: center;
+                        position: relative;
+                        overflow-x: hidden;
+                    }
+
+                    /* Error scanlines effect */
+                    body::before {
+                        content: '';
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100vw;
+                        height: 100vh;
+                        background: repeating-linear-gradient(0deg,
+                            transparent,
+                            transparent 2px,
+                            rgba(var(--error-rgb), 0.05) 2px,
+                            rgba(var(--error-rgb), 0.05) 4px);
+                        pointer-events: none;
+                        z-index: 1000;
+                        animation: error-scanlines 0.1s linear infinite;
+                    }
+
+                    @keyframes error-scanlines {
+                        0% { transform: translateY(0); }
+                        100% { transform: translateY(4px); }
+                    }
+
+                    .container {
+                        max-width: 600px;
+                        padding: 2rem;
+                        text-align: center;
+                        background: var(--error-bg);
+                        border: 2px solid var(--error);
+                        border-radius: 10px;
+                        box-shadow: 0 0 30px var(--error), 0 0 60px var(--error);
+                        position: relative;
+                        z-index: 10;
+                    }
+
+                    .error-icon {
+                        font-size: 4rem;
+                        color: var(--error);
+                        margin-bottom: 1rem;
+                        animation: error-pulse 1s ease-in-out infinite alternate;
+                    }
+
+                    @keyframes error-pulse {
+                        from {
+                            text-shadow: 0 0 20px var(--error);
+                            transform: scale(1);
+                        }
+                        to {
+                            text-shadow: 0 0 40px var(--error), 0 0 60px var(--error);
+                            transform: scale(1.1);
+                        }
+                    }
+
+                    .title {
+                        font-size: 2rem;
+                        color: var(--error);
+                        text-shadow: 0 0 20px var(--error);
+                        margin-bottom: 1rem;
+                    }
+
+                    .message {
+                        font-size: 1.1rem;
+                        color: var(--primary-alt);
+                        margin-bottom: 2rem;
+                        line-height: 1.6;
+                    }
+
+                    .error-details {
+                        background: rgba(var(--secondary-color-rgb), 0.2);
+                        border: 1px solid var(--secondary-color);
+                        border-radius: 5px;
+                        padding: 1rem;
+                        margin: 1rem 0;
+                        font-family: 'JetBrains Mono', monospace;
+                        text-align: left;
+                    }
+
+                    .btn {
+                        padding: 1rem 2rem;
+                        font-size: 1.1rem;
+                        font-family: inherit;
+                        border: 2px solid;
+                        border-radius: 5px;
+                        cursor: pointer;
+                        text-decoration: none;
+                        display: inline-block;
+                        transition: all 0.3s ease;
+                        text-transform: uppercase;
+                        letter-spacing: 1px;
+                        margin: 0.5rem;
+                    }
+
+                    .btn-primary {
+                        background: var(--tertiary-color);
+                        color: white;
+                        border-color: var(--tertiary-color);
+                        box-shadow: 0 0 20px rgba(var(--tertiary-color-rgb), 0.5);
+                    }
+
+                    .btn-primary:hover {
+                        background: var(--secondary-alt);
+                        border-color: var(--secondary-alt);
+                        box-shadow: 0 0 30px var(--secondary-alt);
+                        transform: translateY(-2px);
+                    }
+
+                    .btn-secondary {
+                        background: transparent;
+                        color: var(--nav-alt);
+                        border-color: var(--nav-alt);
+                        box-shadow: 0 0 20px rgba(var(--nav-color-rgb), 0.5);
+                    }
+
+                    .btn-secondary:hover {
+                        background: var(--nav-alt);
+                        color: var(--button-alt);
+                        box-shadow: 0 0 30px var(--nav-alt);
+                        transform: translateY(-2px);
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="error-icon">🚨</div>
+                    <h1 class="title">AUTHENTICATION ERROR</h1>
+
+                    <div class="message">
+                        <p>A technical error occurred during the authentication process.</p>
+                        <p>Please try again or contact support if the problem persists.</p>
+                    </div>
+
+                    <div class="error-details">
+                        <p><strong>Error:</strong> ${error instanceof Error ? error.message : 'Unknown error'}</p>
+                    </div>
+
+                    <div>
+                        <a href="/auth/patreon" class="btn btn-primary">🔄 Try Again</a>
+                        <a href="/" class="btn btn-secondary">← Back to Home</a>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `);
+    }
+});
+
+// Patreon webhook endpoint
+app.use('/webhooks/patreon', createWebhookMiddleware(webhookHandler));
 
 // Serve static files for agent integration
 app.use('/static', express.static(path.join(__dirname, '../public')));
@@ -100,7 +1088,450 @@ app.use('/agent-app', express.static(path.join(__dirname, '../../agent/js-bambis
 
 // Serve landing page at root
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/index.html'));
+    const isAuthenticated = req.isAuthenticated();
+    const hasPatreonAuth = req.session.patreonUser;
+
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="en" class="cyber-terminal">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta name="description" content="BambiSleep Chat - MCP Integration Platform with Patreon & GitHub Authentication">
+            <title>🌸 BAMBISLEEP CHAT MCP PLATFORM 🌸</title>
+
+            <!-- Neon Cyber Goth Wave Theme CSS -->
+            <style>
+                :root {
+                    /* FICKDICHSELBER.COM NEON CYBER GOTH WAVE PALETTE */
+                    --primary-color: #0c2a2ac9;
+                    --primary-alt: #15aab5ec;
+                    --secondary-color: #40002f;
+                    --secondary-alt: #cc0174;
+                    --tertiary-color: #cc0174;
+                    --tertiary-alt: #01c69eae;
+                    --button-color: #df0471;
+                    --button-alt: #110000;
+                    --nav-color: #0a2626;
+                    --nav-alt: #17dbd8;
+                    --transparent: #124141ce;
+                    --success: #01c69eae;
+                    --warning: #ffaa00;
+
+                    /* Font rendering optimizations */
+                    font-synthesis: none;
+                    text-rendering: optimizeLegibility;
+                    -webkit-font-smoothing: antialiased;
+                    -moz-osx-font-smoothing: grayscale;
+
+                    /* RGB values for alpha compositing */
+                    --primary-color-rgb: 12, 42, 42;
+                    --secondary-color-rgb: 64, 0, 47;
+                    --tertiary-color-rgb: 204, 1, 116;
+                    --nav-color-rgb: 10, 38, 38;
+                    --button-color-rgb: 223, 4, 113;
+                    --success-rgb: 1, 198, 158;
+                    --warning-rgb: 255, 170, 0;
+                }
+
+                @import url("https://fonts.googleapis.com/css2?family=Audiowide&family=Fira+Code:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap");
+
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+
+                body {
+                    font-family: 'Audiowide', 'JetBrains Mono', 'Fira Code', monospace;
+                    background: var(--button-alt);
+                    color: var(--primary-alt);
+                    min-height: 100vh;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    position: relative;
+                    overflow-x: hidden;
+                    padding: 1rem;
+                }
+
+                /* Cyber terminal scanlines effect */
+                body::before {
+                    content: '';
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100vw;
+                    height: 100vh;
+                    background: repeating-linear-gradient(0deg,
+                        transparent,
+                        transparent 2px,
+                        rgba(var(--tertiary-color-rgb), 0.03) 2px,
+                        rgba(var(--tertiary-color-rgb), 0.03) 4px);
+                    pointer-events: none;
+                    z-index: 1000;
+                    animation: scanlines 0.1s linear infinite;
+                }
+
+                @keyframes scanlines {
+                    0% { transform: translateY(0); }
+                    100% { transform: translateY(4px); }
+                }
+
+                .container {
+                    max-width: 900px;
+                    width: 100%;
+                    padding: 2rem;
+                    text-align: center;
+                    background: rgba(var(--primary-color-rgb), 0.2);
+                    border: 2px solid var(--tertiary-color);
+                    border-radius: 10px;
+                    box-shadow: 0 0 30px var(--tertiary-color), 0 0 60px var(--tertiary-color);
+                    position: relative;
+                    z-index: 10;
+                }
+
+                .title {
+                    font-size: 2.5rem;
+                    color: var(--tertiary-color);
+                    text-shadow: 0 0 20px var(--tertiary-color);
+                    margin-bottom: 1rem;
+                    animation: glow-pulse 2s ease-in-out infinite alternate;
+                }
+
+                @keyframes glow-pulse {
+                    from { text-shadow: 0 0 20px var(--tertiary-color); }
+                    to { text-shadow: 0 0 30px var(--tertiary-color), 0 0 40px var(--tertiary-color); }
+                }
+
+                .subtitle {
+                    font-size: 1.2rem;
+                    color: var(--nav-alt);
+                    margin-bottom: 2rem;
+                    text-shadow: 0 0 10px var(--nav-alt);
+                }
+
+                .auth-section {
+                    background: rgba(var(--secondary-color-rgb), 0.2);
+                    border: 1px solid var(--secondary-color);
+                    border-radius: 10px;
+                    padding: 1.5rem;
+                    margin: 2rem 0;
+                }
+
+                .auth-section h2 {
+                    color: var(--tertiary-color);
+                    text-shadow: 0 0 10px var(--tertiary-color);
+                    margin-bottom: 1rem;
+                    font-size: 1.5rem;
+                }
+
+                .status {
+                    padding: 0.8rem;
+                    border-radius: 5px;
+                    margin: 0.8rem 0;
+                    font-family: 'JetBrains Mono', monospace;
+                    border: 1px solid;
+                }
+
+                .status.success {
+                    background: rgba(var(--success-rgb), 0.2);
+                    border-color: var(--success);
+                    color: var(--success);
+                    text-shadow: 0 0 10px var(--success);
+                }
+
+                .status.pending {
+                    background: rgba(var(--warning-rgb), 0.2);
+                    border-color: var(--warning);
+                    color: var(--warning);
+                    text-shadow: 0 0 10px var(--warning);
+                }
+
+                .btn {
+                    padding: 1rem 2rem;
+                    font-size: 1.1rem;
+                    font-family: inherit;
+                    border: 2px solid;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    text-decoration: none;
+                    display: inline-block;
+                    transition: all 0.3s ease;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                    margin: 0.5rem;
+                    position: relative;
+                    overflow: hidden;
+                }
+
+                .btn-github {
+                    background: var(--nav-color);
+                    color: var(--nav-alt);
+                    border-color: var(--nav-alt);
+                    box-shadow: 0 0 20px rgba(var(--nav-color-rgb), 0.5);
+                }
+
+                .btn-github:hover {
+                    background: var(--nav-alt);
+                    color: var(--button-alt);
+                    box-shadow: 0 0 30px var(--nav-alt);
+                    transform: translateY(-2px);
+                }
+
+                .btn-patreon {
+                    background: var(--button-color);
+                    color: white;
+                    border-color: var(--button-color);
+                    box-shadow: 0 0 20px rgba(var(--button-color-rgb), 0.5);
+                }
+
+                .btn-patreon:hover {
+                    background: var(--secondary-alt);
+                    border-color: var(--secondary-alt);
+                    box-shadow: 0 0 30px var(--secondary-alt);
+                    transform: translateY(-2px);
+                }
+
+                .btn-dashboard {
+                    background: var(--tertiary-alt);
+                    color: var(--button-alt);
+                    border-color: var(--tertiary-alt);
+                    box-shadow: 0 0 20px rgba(var(--tertiary-color-rgb), 0.5);
+                }
+
+                .btn-dashboard:hover {
+                    background: var(--tertiary-color);
+                    border-color: var(--tertiary-color);
+                    box-shadow: 0 0 30px var(--tertiary-color);
+                    transform: translateY(-2px);
+                }
+
+                .btn-terminal {
+                    background: var(--success);
+                    color: var(--button-alt);
+                    border-color: var(--success);
+                    box-shadow: 0 0 20px rgba(var(--success-rgb), 0.5);
+                }
+
+                .btn-terminal:hover {
+                    background: var(--nav-alt);
+                    border-color: var(--nav-alt);
+                    box-shadow: 0 0 30px var(--nav-alt);
+                    transform: translateY(-2px);
+                }
+
+                .endpoints, .features {
+                    background: rgba(var(--nav-color-rgb), 0.2);
+                    border: 1px solid var(--nav-color);
+                    border-radius: 10px;
+                    padding: 1.5rem;
+                    margin: 2rem 0;
+                    text-align: left;
+                }
+
+                .endpoints h2, .features h2 {
+                    color: var(--nav-alt);
+                    text-shadow: 0 0 10px var(--nav-alt);
+                    margin-bottom: 1rem;
+                    font-size: 1.5rem;
+                    text-align: center;
+                }
+
+                .endpoint {
+                    margin: 0.8rem 0;
+                    font-family: 'JetBrains Mono', monospace;
+                    background: rgba(var(--primary-color-rgb), 0.3);
+                    padding: 0.8rem;
+                    border-radius: 5px;
+                    border-left: 3px solid var(--tertiary-color);
+                    color: var(--primary-alt);
+                }
+
+                .features ul {
+                    list-style: none;
+                    padding: 0;
+                }
+
+                .features li {
+                    margin: 0.8rem 0;
+                    padding: 0.8rem;
+                    background: rgba(var(--primary-color-rgb), 0.3);
+                    border-radius: 5px;
+                    border-left: 3px solid var(--success);
+                    color: var(--primary-alt);
+                }
+
+                /* Glitch effect for title */
+                .glitch {
+                    position: relative;
+                }
+
+                .glitch::before,
+                .glitch::after {
+                    content: attr(data-text);
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                }
+
+                .glitch::before {
+                    animation: glitch-1 2s infinite;
+                    color: var(--nav-alt);
+                    z-index: -1;
+                }
+
+                .glitch::after {
+                    animation: glitch-2 2s infinite;
+                    color: var(--secondary-alt);
+                    z-index: -2;
+                }
+
+                @keyframes glitch-1 {
+                    0%, 14%, 15%, 49%, 50%, 99%, 100% {
+                        transform: translate(0);
+                    }
+                    15%, 49% {
+                        transform: translate(-2px, 2px);
+                    }
+                }
+
+                @keyframes glitch-2 {
+                    0%, 20%, 21%, 62%, 63%, 99%, 100% {
+                        transform: translate(0);
+                    }
+                    21%, 62% {
+                        transform: translate(2px, -2px);
+                    }
+                }
+
+                @media (max-width: 768px) {
+                    .container {
+                        margin: 1rem;
+                        padding: 1.5rem;
+                    }
+
+                    .title {
+                        font-size: 2rem;
+                    }
+
+                    .btn {
+                        display: block;
+                        margin: 0.5rem 0;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1 class="title glitch" data-text="🌸 BAMBISLEEP CHAT 🌸">🌸 BAMBISLEEP CHAT 🌸</h1>
+                <p class="subtitle">MCP Integration Platform with Patreon & GitHub Authentication</p>
+
+                <div class="auth-section">
+                    <h2>🔐 Authentication Status</h2>
+                    ${isAuthenticated ?
+            `<div class="status success">✅ GitHub: Authenticated</div>` :
+            `<div class="status pending">⏳ GitHub: Not authenticated</div>`
+        }
+                    ${hasPatreonAuth ?
+            `<div class="status success">✅ Patreon: Authenticated as ${req.session.patreonUser.attributes?.full_name || 'Patron'}</div>` :
+            `<div class="status pending">⏳ Patreon: Not authenticated</div>`
+        }
+
+                    <div style="margin-top: 1.5rem;">
+                        ${!isAuthenticated ?
+            `<a href="/auth/github" class="btn btn-github">💻 Login with GitHub</a>` :
+            `<a href="/dashboard" class="btn btn-dashboard">📊 Dashboard</a>`
+        }
+                        ${!hasPatreonAuth ?
+            `<a href="/auth/patreon" class="btn btn-patreon">🌸 Login with Patreon</a>` :
+            `<a href="/terminal" class="btn btn-terminal">💬 Chat Terminal</a>`
+        }
+                    </div>
+                </div>
+
+                <div class="endpoints">
+                    <h2>📡 API Endpoints</h2>
+                    <div class="endpoint">GET /health - Health Check</div>
+                    <div class="endpoint">GET /auth/github - GitHub OAuth</div>
+                    <div class="endpoint">GET /auth/patreon - Patreon OAuth</div>
+                    <div class="endpoint">POST /webhooks/patreon - Patreon Webhooks</div>
+                    <div class="endpoint">GET /api/mcp - MCP Server API</div>
+                    <div class="endpoint">GET /api/dock - Agent Docking</div>
+                    <div class="endpoint">WS /socket.io - Real-time Communication</div>
+                </div>
+
+                <div class="features">
+                    <h2>🚀 Features</h2>
+                    <ul>
+                        <li>🔐 Dual OAuth (GitHub + Patreon)</li>
+                        <li>💬 Real-time Chat with Dr. Girlfriend Agent</li>
+                        <li>🎨 Patreon Integration & Patron Verification</li>
+                        <li>📡 MCP Server with Agent Docking</li>
+                        <li>🔄 Socket.IO Real-time Communication</li>
+                        <li>🇦🇹 Austrian GDPR Compliance</li>
+                    </ul>
+                </div>
+            </div>
+
+            <script>
+                // Add some interactive effects
+                document.addEventListener('DOMContentLoaded', function() {
+                    // Add click effects to buttons
+                    const buttons = document.querySelectorAll('.btn');
+                    buttons.forEach(button => {
+                        button.addEventListener('click', function(e) {
+                            // Create ripple effect
+                            const ripple = document.createElement('span');
+                            const rect = this.getBoundingClientRect();
+                            const size = Math.max(rect.width, rect.height);
+                            const x = e.clientX - rect.left - size / 2;
+                            const y = e.clientY - rect.top - size / 2;
+
+                            ripple.style.cssText = \`
+                                position: absolute;
+                                width: \${size}px;
+                                height: \${size}px;
+                                left: \${x}px;
+                                top: \${y}px;
+                                background: rgba(255, 255, 255, 0.2);
+                                border-radius: 50%;
+                                transform: scale(0);
+                                animation: ripple 0.6s linear;
+                                pointer-events: none;
+                            \`;
+
+                            this.appendChild(ripple);
+                            setTimeout(() => ripple.remove(), 600);
+                        });
+                    });
+
+                    // Add hover sound effect simulation
+                    buttons.forEach(button => {
+                        button.addEventListener('mouseenter', function() {
+                            console.log('🔊 Cyber beep sound would play here');
+                        });
+                    });
+                });
+
+                // Add CSS for ripple animation
+                const style = document.createElement('style');
+                style.textContent = \`
+                    @keyframes ripple {
+                        to {
+                            transform: scale(4);
+                            opacity: 0;
+                        }
+                    }
+                \`;
+                document.head.appendChild(style);
+            </script>
+        </body>
+        </html>
+    `);
 });
 
 // Serve agent terminal interface
@@ -136,27 +1567,74 @@ app.get('/health', (_req, res) => {
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
-        version: process.env.npm_package_version || '1.0.0'
-    });
-});
-
-// Root endpoint
-app.get('/', (_req, res) => {
-    res.json({
-        name: 'MCP Server & Agent Docking System',
         version: process.env.npm_package_version || '1.0.0',
-        endpoints: {
-            health: '/health',
-            auth: '/auth',
-            mcp: '/api/mcp',
-            dock: '/api/dock'
+        services: {
+            patreon: !!process.env.PATREON_CLIENT_ID,
+            github: !!process.env.GITHUB_CLIENT_ID,
+            mcp: true,
+            socketio: true
         }
     });
 });
 
-// Socket.IO for real-time communication and MCP docking
+// API info endpoint
+app.get('/api', (_req, res) => {
+    res.json({
+        name: 'BambiSleep Chat - MCP Server & Patreon Integration',
+        version: process.env.npm_package_version || '1.0.0',
+        endpoints: {
+            health: '/health',
+            auth: {
+                github: '/auth/github',
+                patreon: '/auth/patreon'
+            },
+            api: {
+                mcp: '/api/mcp',
+                dock: '/api/dock',
+                patreon: '/api/patreon'
+            },
+            webhooks: {
+                patreon: '/webhooks/patreon'
+            },
+            realtime: 'ws://localhost:6969/socket.io'
+        },
+        features: [
+            'OAuth 2.0 Authentication (GitHub + Patreon)',
+            'MCP Server with Agent Docking',
+            'Real-time Socket.IO Communication',
+            'Patreon Webhook Processing',
+            'Austrian GDPR Compliance'
+        ]
+    });
+});
+
+// Socket.IO for real-time communication and MCP docking with error handling
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
+
+    // Add error handling for socket connections
+    socket.on('error', (error) => {
+        console.error(`Socket error for ${socket.id}:`, error);
+    });
+
+    // Add connection error handling
+    socket.on('connect_error', (error) => {
+        console.error(`Connection error for ${socket.id}:`, error);
+    });
+
+    // Add disconnection handling with cleanup
+    socket.on('disconnect', (reason) => {
+        console.log(`Client disconnected: ${socket.id}, reason: ${reason}`);
+        // Clean up any socket-specific dock sessions
+        if (global.socketDocks) {
+            for (const [dockId, dock] of global.socketDocks.entries()) {
+                if (dock.socketId === socket.id) {
+                    console.log(`🧹 Cleaning up socket dock session: ${dockId}`);
+                    global.socketDocks.delete(dockId);
+                }
+            }
+        }
+    });
 
     // MCP Docking via Socket.IO
     socket.on('mcp-dock-request', async (data) => {
@@ -233,19 +1711,48 @@ io.on('connection', (socket) => {
     socket.on('patron-verify', async (data) => {
         const { requestId, dockId, patronCredentials } = data;
         try {
-            // Implement patron verification logic here
-            // For now, we'll simulate success
-            socket.emit(`patron-verify-response-${requestId}`, {
-                success: true,
-                patronVerified: true,
-                bambisleepId: patronCredentials.bambisleepId
-            });
+            // Use the integrated Patreon API client for verification
+            if (patronCredentials.accessToken) {
+                const apiClient = new PatreonAPIClient({
+                    accessToken: patronCredentials.accessToken,
+                    userAgent: process.env.PATREON_USER_AGENT
+                });
+
+                const user = await apiClient.getCurrentUser();
+                const userData = Array.isArray(user.data) ? user.data[0] : user.data;
+
+                socket.emit(`patron-verify-response-${requestId}`, {
+                    success: true,
+                    patronVerified: true,
+                    bambisleepId: userData.id,
+                    patronName: userData.attributes?.full_name,
+                    patronEmail: userData.attributes?.email
+                });
+            } else {
+                socket.emit(`patron-verify-response-${requestId}`, {
+                    success: false,
+                    error: 'Access token required for patron verification'
+                });
+            }
         } catch (error) {
             socket.emit(`patron-verify-response-${requestId}`, {
                 success: false,
                 error: error.message
             });
         }
+    });
+
+    // Patreon OAuth flow via Socket.IO
+    socket.on('patreon-auth-request', (data) => {
+        const { requestId } = data;
+        const scopes = ['identity', 'campaigns', 'campaigns.members'];
+        const authUrl = patreonOAuth.getAuthorizationUrl(scopes, requestId);
+
+        socket.emit('patreon-auth-response', {
+            requestId,
+            authUrl,
+            instructions: 'Open this URL in your browser to complete Patreon authentication'
+        });
     });
 
     socket.on('dock-request', (data) => {
@@ -292,24 +1799,124 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 6969;
 const HOST = process.env.HOST || '0.0.0.0';
 
-server.listen(PORT, HOST, () => {
-    console.log(`🚀 MCP Server running on http://${HOST}:${PORT}`);
-    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-}).on('error', (err) => {
-    if (err.code === 'EADDRNOTAVAIL') {
-        console.log(`❌ Address ${HOST}:${PORT} not available, trying 0.0.0.0:${PORT}`);
-        server.listen(PORT, '0.0.0.0', () => {
-            console.log(`🚀 MCP Server running on http://0.0.0.0:${PORT}`);
+// Initialize Patreon Process Manager
+async function initializePatreonService() {
+    try {
+        console.log('🔧 Initializing Patreon service...');
+        const patreonManager = new PatreonProcessManager();
+
+        // Store in app locals for access in routes
+        app.locals.patreonManager = patreonManager;
+
+        // Set up webhook event handlers
+        patreonManager.on('webhook', (data) => {
+            console.log('📨 Patreon webhook received:', data.type);
+            // Emit to socket.io clients if needed
+            io.emit('patreon:webhook', data);
         });
-    } else if (err.code === 'EADDRINUSE') {
-        console.log(`❌ Port ${PORT} in use, trying ${PORT + 1}`);
-        server.listen(PORT + 1, HOST, () => {
-            console.log(`🚀 MCP Server running on http://${HOST}:${PORT + 1}`);
+
+        patreonManager.on('error', (error) => {
+            console.error('❌ Patreon service error:', error);
         });
-    } else {
-        console.error('Server error:', err);
+
+        patreonManager.on('exit', (code, signal) => {
+            console.log(`⚠️ Patreon service exited with code ${code}, signal ${signal}`);
+        });
+
+        // Start the Patreon worker
+        await patreonManager.start();
+        console.log('✅ Patreon service initialized successfully');
+
+        return patreonManager;
+    } catch (error) {
+        console.error('❌ Failed to initialize Patreon service:', error);
+        // Don't fail the entire server if Patreon service fails
+        return null;
+    }
+}
+
+// Start server
+async function startServer() {
+    // Initialize Patreon service (non-blocking)
+    await initializePatreonService();
+
+    // Start HTTP server
+    server.listen(PORT, HOST, () => {
+        console.log(`🚀 MCP Server running on http://${HOST}:${PORT}`);
+        console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+    }).on('error', (err) => {
+        if (err.code === 'EADDRNOTAVAIL') {
+            console.log(`❌ Address ${HOST}:${PORT} not available, trying 0.0.0.0:${PORT}`);
+            server.listen(PORT, '0.0.0.0', () => {
+                console.log(`🚀 MCP Server running on http://0.0.0.0:${PORT}`);
+            });
+        } else if (err.code === 'EADDRINUSE') {
+            console.log(`❌ Port ${PORT} in use, trying ${PORT + 1}`);
+            server.listen(PORT + 1, HOST, () => {
+                console.log(`🚀 MCP Server running on http://${HOST}:${PORT + 1}`);
+            });
+        } else {
+            console.error('Server error:', err);
+            process.exit(1);
+        }
+    });
+}
+
+// Global error handlers for uncaught exceptions and unhandled rejections
+process.on('uncaughtException', (error) => {
+    console.error('🚨 Uncaught Exception:', error);
+    console.error('Stack:', error.stack);
+    // Graceful shutdown
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('� Unhandled Rejection at:', promise, 'reason:', reason);
+    console.error('Stack:', reason?.stack);
+    // Don't exit immediately for unhandled rejections in production
+    if (process.env.NODE_ENV !== 'production') {
         process.exit(1);
     }
 });
+
+// Enhanced graceful shutdown
+async function gracefulShutdown(signal) {
+    console.log(`\n🛑 Received ${signal}. Gracefully shutting down...`);
+
+    try {
+        // Close Patreon manager first
+        if (app.locals.patreonManager) {
+            await app.locals.patreonManager.stop();
+            console.log('🔌 Patreon manager stopped');
+        }
+
+        // Close Socket.IO server
+        io.close(() => {
+            console.log('🔌 Socket.IO server closed');
+        });
+
+        // Close HTTP server
+        server.close(() => {
+            console.log('🔌 HTTP server closed');
+            process.exit(0);
+        });
+
+        // Force close after 10 seconds
+        setTimeout(() => {
+            console.error('⏰ Could not close connections in time, forcefully shutting down');
+            process.exit(1);
+        }, 10000);
+
+    } catch (error) {
+        console.error('Error during shutdown:', error);
+        process.exit(1);
+    }
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Start the server
+startServer();
 
 module.exports = { app, server, io };
