@@ -1,6 +1,8 @@
+/* eslint-disable indent */
 require('dotenv').config({ path: '../.env' });
 
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const bodyParser = require('body-parser');
@@ -12,13 +14,15 @@ const { Server } = require('socket.io');
 const authRoutes = require('./routes/auth');
 const mcpRoutes = require('./routes/mcp');
 const dockRoutes = require('./routes/dock');
+const agentDockRoutes = require('./routes/agent-dock');
+const agentIntegrationRoutes = require('./routes/agent-integration');
 
 const app = express();
 const server = createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: process.env.CORS_ORIGIN || "http://localhost:3000",
-        methods: ["GET", "POST"]
+        origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+        methods: ['GET', 'POST']
     }
 });
 
@@ -26,18 +30,37 @@ const io = new Server(server, {
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
-            defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'"],
-            styleSrc: ["'self'", "'unsafe-inline'"],
-            imgSrc: ["'self'", "data:", "https:"],
-        },
-    },
+            defaultSrc: ['\'self\''],
+            scriptSrc: ['\'self\'', '\'unsafe-inline\''],
+            styleSrc: ['\'self\'', '\'unsafe-inline\''],
+            imgSrc: ['\'self\'', 'data:', 'https:']
+        }
+    }
 }));
 
-// CORS configuration
+// CORS configuration - Allow agent and development access
+const allowedOrigins = [
+    'http://localhost:3004', // Agent Dr Girlfriend
+    'http://localhost:3000', // MCP Server
+    'http://localhost:3001', // Alternative development port
+    process.env.CORS_ORIGIN || 'http://localhost:3004'
+];
+
 app.use(cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:3000",
-    credentials: true
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            console.log('CORS blocked origin:', origin);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'User-Agent']
 }));
 
 // Body parsing middleware
@@ -68,9 +91,14 @@ require('./auth/strategies');
 app.use('/auth', authRoutes);
 app.use('/api/mcp', mcpRoutes);
 app.use('/api/dock', dockRoutes);
+app.use('/api/agent-dock', agentDockRoutes);
+app.use('/agent', agentIntegrationRoutes);
+
+// Serve static files for agent integration
+app.use('/static', express.static(path.join(__dirname, '../public')));
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
@@ -79,7 +107,7 @@ app.get('/health', (req, res) => {
 });
 
 // Root endpoint
-app.get('/', (req, res) => {
+app.get('/', (_req, res) => {
     res.json({
         name: 'MCP Server & Agent Docking System',
         version: process.env.npm_package_version || '1.0.0',
@@ -108,7 +136,7 @@ io.on('connection', (socket) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
+app.use((err, _req, res, _next) => {
     console.error('Error:', err);
     res.status(err.status || 500).json({
         error: {
@@ -128,12 +156,27 @@ app.use((req, res) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || 'localhost';
+const PORT = process.env.PORT || 8888;
+const HOST = process.env.HOST || '0.0.0.0';
 
 server.listen(PORT, HOST, () => {
     console.log(`🚀 MCP Server running on http://${HOST}:${PORT}`);
     console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+}).on('error', (err) => {
+    if (err.code === 'EADDRNOTAVAIL') {
+        console.log(`❌ Address ${HOST}:${PORT} not available, trying 0.0.0.0:${PORT}`);
+        server.listen(PORT, '0.0.0.0', () => {
+            console.log(`🚀 MCP Server running on http://0.0.0.0:${PORT}`);
+        });
+    } else if (err.code === 'EADDRINUSE') {
+        console.log(`❌ Port ${PORT} in use, trying ${PORT + 1}`);
+        server.listen(PORT + 1, HOST, () => {
+            console.log(`🚀 MCP Server running on http://${HOST}:${PORT + 1}`);
+        });
+    } else {
+        console.error('Server error:', err);
+        process.exit(1);
+    }
 });
 
 module.exports = { app, server, io };

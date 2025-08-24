@@ -217,6 +217,93 @@ function sanitizeInput(data, allowedFields = []) {
     const sanitized = {};
     for (const field of allowedFields) {
         if (data.hasOwnProperty(field)) {
+/**
+ * Generic input validation function
+ * @param {object} data - Data to validate
+ * @param {object} schema - Validation schema with field requirements
+ * @returns {object} Validation result with isValid boolean and errors array
+ */
+function validateInput(data, schema) {
+    const errors = [];
+    
+    if (!data || typeof data !== 'object') {
+        return {
+            isValid: false,
+            errors: ['Input data must be an object']
+        };
+    }
+
+    for (const [field, rules] of Object.entries(schema)) {
+        const value = data[field];
+
+        // Check required fields
+        if (rules.required && (value === undefined || value === null || value === '')) {
+            errors.push(`Field '${field}' is required`);
+            continue;
+        }
+
+        // Skip validation if field is not required and not provided
+        if (!rules.required && (value === undefined || value === null)) {
+            continue;
+        }
+
+        // Type validation
+        if (rules.type) {
+            const actualType = typeof value;
+            if (rules.type === 'array' && !Array.isArray(value)) {
+                errors.push(`Field '${field}' must be an array`);
+                continue;
+            } else if (rules.type !== 'array' && actualType !== rules.type) {
+                errors.push(`Field '${field}' must be of type ${rules.type}`);
+                continue;
+            }
+        }
+
+        // String validations
+        if (typeof value === 'string') {
+            if (rules.minLength && value.length < rules.minLength) {
+                errors.push(`Field '${field}' must be at least ${rules.minLength} characters long`);
+            }
+            if (rules.maxLength && value.length > rules.maxLength) {
+                errors.push(`Field '${field}' must be no more than ${rules.maxLength} characters long`);
+            }
+            if (rules.pattern && !rules.pattern.test(value)) {
+                errors.push(`Field '${field}' does not match the required pattern`);
+            }
+        }
+
+        // Number validations
+        if (typeof value === 'number') {
+            if (rules.min && value < rules.min) {
+                errors.push(`Field '${field}' must be at least ${rules.min}`);
+            }
+            if (rules.max && value > rules.max) {
+                errors.push(`Field '${field}' must be no more than ${rules.max}`);
+            }
+        }
+
+        // Boolean validations
+        if (typeof value === 'boolean' && rules.value !== undefined) {
+            if (value !== rules.value) {
+                errors.push(`Field '${field}' must be ${rules.value}`);
+            }
+        }
+
+        // Custom validation function
+        if (rules.validate && typeof rules.validate === 'function') {
+            const customResult = rules.validate(value);
+            if (customResult !== true) {
+                errors.push(customResult || `Field '${field}' failed custom validation`);
+            }
+        }
+    }
+
+    return {
+        isValid: errors.length === 0,
+        errors
+    };
+}
+
             sanitized[field] = data[field];
         }
     }
@@ -231,6 +318,7 @@ module.exports = {
     validateGitOperation: validateGitOperationObject,
     validateGitHubOperation: validateGitHubOperationObject,
     validateEnvironment,
+    validateInput,
     isValidUrl,
     sanitizeInput
 };
