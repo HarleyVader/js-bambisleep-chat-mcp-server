@@ -2,15 +2,11 @@
     "name": "@bambisleep/mcp-server",
     "version": "1.0.0",
     "description": "MCP Server implementation with OAuth and GitHub integration",
-    "main": "src/app.js",
+    "main": "src/server.js",
     "scripts": {
-        "start": "cross-env NODE_ENV=production node src/app.js",
-        "dev": "cross-env NODE_ENV=development nodemon src/app.js",
-        "test": "jest",
-        "test:watch": "jest --watch",
-        "test:coverage": "jest --coverage",
-        "lint": "eslint src/ --ext .js",
-        "lint:fix": "eslint src/ --ext .js --fix"
+        "start": "cross-env NODE_ENV=production node src/server.js",
+        "dev": "cross-env NODE_ENV=development nodemon src/server.js",
+        "build": "echo 'No build step needed for Node.js server'"
     },
     "dependencies": {
         "express": "^4.18.2",
