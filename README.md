@@ -7,7 +7,7 @@ A comprehensive Model Context Protocol (MCP) server with GitHub integration and 
 1. **Clone and setup**:
 
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/HarleyVader/js-bambisleep-chat-mcp-server.git
    cd js-bambisleep-chat-mcp-server
    npm install
    ```
