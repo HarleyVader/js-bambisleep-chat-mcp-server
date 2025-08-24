@@ -27,7 +27,7 @@ A comprehensive Model Context Protocol (MCP) server with GitHub integration and 
 
 ## Project Structure
 
-```
+```text
 js-bambisleep-chat-mcp-server/
 ├── server/                 # MCP Server implementation
 │   ├── src/

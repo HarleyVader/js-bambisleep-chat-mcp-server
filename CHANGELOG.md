@@ -7,12 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
 - Initial project setup and repository creation
 
 ## [1.0.0] - 2025-08-24
 
 ### Added
+
 - Complete monorepo structure with server, agent, and shared workspaces
 - Express-based MCP server with comprehensive routing
 - OAuth authentication system with GitHub integration
@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Technical Details
 
 #### MCP Server Features
+
 - OAuth 2.0 integration (GitHub ready, Patreon placeholder)
 - Session-based authentication with secure cookies
 - RESTful API endpoints for authentication, MCP operations, and docking
@@ -45,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Health check endpoints for monitoring
 
 #### MCP Agent Features
+
 - GitHub API client with full repository operations
 - Git operations for code manipulation and version control
 - WebSocket client for server communication
@@ -53,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Retry logic and error recovery
 
 #### Infrastructure
+
 - Docker multi-container setup with Redis
 - Development and production configurations
 - Automated dependency management
@@ -61,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive test coverage setup
 
 ### Dependencies
+
 - Express.js 4.18.2 for web server
 - Socket.IO 4.7.5 for real-time communication
 - Passport.js with GitHub OAuth strategy
@@ -73,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ESLint 8.57.0 and Prettier 3.2.5 for code quality
 
 ### Security Features
+
 - Helmet.js for security headers
 - CORS configuration for cross-origin requests
 - Input sanitization and validation
@@ -81,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker security with non-root users
 
 ### Development Experience
+
 - Hot-reload development environment
 - Comprehensive error handling and logging
 - Structured project organization

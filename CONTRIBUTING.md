@@ -41,23 +41,27 @@ We welcome feature suggestions! Please:
 ## Development Setup
 
 1. **Clone the repository**:
+
    ```bash
    git clone https://github.com/HarleyVader/js-bambisleep-chat-mcp-server.git
    cd js-bambisleep-chat-mcp-server
    ```
 
 2. **Install dependencies**:
+
    ```bash
    npm install
    ```
 
 3. **Set up environment**:
+
    ```bash
    cp .env.example .env
    # Configure your environment variables
    ```
 
 4. **Start development**:
+
    ```bash
    npm run dev
    ```
@@ -81,7 +85,8 @@ We welcome feature suggestions! Please:
 - Use the body to explain what and why, not how
 
 Example:
-```
+
+```text
 Add WebSocket reconnection logic
 
 - Implement exponential backoff for reconnection attempts
@@ -107,7 +112,7 @@ Fixes #123
 
 ## Project Structure
 
-```
+```text
 js-bambisleep-chat-mcp-server/
 ├── server/                 # MCP Server implementation
 ├── agent/                 # GitHub integration agent
@@ -120,18 +125,21 @@ js-bambisleep-chat-mcp-server/
 ## Component Guidelines
 
 ### MCP Server
+
 - Follow Express.js best practices
 - Implement proper error handling
 - Use middleware for common functionality
 - Validate all inputs
 
 ### MCP Agent
+
 - Handle GitHub API rate limits
 - Implement proper retry logic
 - Use structured logging
 - Handle network failures gracefully
 
 ### Shared Components
+
 - Keep utilities pure and testable
 - Provide comprehensive type definitions
 - Maintain backward compatibility

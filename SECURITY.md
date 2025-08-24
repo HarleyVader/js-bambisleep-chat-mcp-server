@@ -25,7 +25,7 @@ Instead, please report them privately using one of these methods:
    - Fill out the form with details
 
 2. **Email**:
-   - Send an email to: security@example.com
+   - Send an email to: <security@example.com>
    - Include "MCP Security" in the subject line
 
 ### What to Include
@@ -50,23 +50,27 @@ When reporting a vulnerability, please include:
 Our project implements several security measures:
 
 #### Authentication & Authorization
+
 - OAuth 2.0 integration with GitHub and Patreon
 - Session-based authentication with secure cookies
 - CSRF protection and secure headers
 
 #### Data Protection
+
 - Environment variable protection for secrets
 - Input validation and sanitization
 - SQL injection prevention
 - XSS protection headers
 
 #### Infrastructure Security
+
 - Docker containerization with non-root users
 - Network isolation between services
 - Security scanning in CI/CD pipeline
 - Dependency vulnerability scanning
 
 #### Code Security
+
 - ESLint security rules
 - Regular dependency updates
 - Code review requirements
