@@ -195,7 +195,13 @@ class PatreonAPIClient {
 
         Object.entries(params).forEach(([key, value]) => {
             if (value !== undefined && value !== null) {
-                if (Array.isArray(value)) {
+                if (key === 'fields' && typeof value === 'object') {
+                    // Handle fields parameter specially for sparse fieldsets
+                    const fieldsParams = PatreonAPIClient.buildFieldsParam(value);
+                    Object.entries(fieldsParams).forEach(([fieldKey, fieldValue]) => {
+                        entries.push(`${encodeURIComponent(fieldKey)}=${encodeURIComponent(fieldValue)}`);
+                    });
+                } else if (Array.isArray(value)) {
                     entries.push(`${encodeURIComponent(key)}=${encodeURIComponent(value.join(','))}`);
                 } else {
                     entries.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
@@ -232,6 +238,10 @@ class PatreonAPIClient {
     async getCurrentUser(params = {}) {
         const queryString = this.buildQueryString(params);
         const url = `/identity${queryString ? `?${queryString}` : ''}`;
+        
+        console.log('🔍 Patreon API URL:', `https://www.patreon.com/api/oauth2/v2${url}`);
+        console.log('🔍 Query params:', params);
+        console.log('🔍 Query string:', queryString);
 
         return this.makeRequest({
             method: 'GET',

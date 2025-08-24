@@ -583,6 +583,14 @@ app.get('/auth/patreon/callback', async (req, res) => {
         }
 
         const tokens = await patreonOAuth.getTokens(code);
+        
+        console.log('🔍 OAuth tokens received:', {
+            access_token: tokens.access_token ? 'PRESENT' : 'MISSING',
+            refresh_token: tokens.refresh_token ? 'PRESENT' : 'MISSING',
+            token_type: tokens.token_type,
+            scope: tokens.scope,
+            expires_in: tokens.expires_in
+        });
 
         // Create API client with the new tokens
         const apiClient = new PatreonAPIClient({
@@ -597,7 +605,13 @@ app.get('/auth/patreon/callback', async (req, res) => {
             },
             include: 'memberships'
         });
+        
+        // Debug logging to see what we actually get
+        console.log('🔍 Patreon API Response:', JSON.stringify(user, null, 2));
+        
         const userData = Array.isArray(user.data) ? user.data[0] : user.data;
+        
+        console.log('🔍 Extracted userData:', JSON.stringify(userData, null, 2));
 
         if (!userData) {
             throw new Error('No user data received from Patreon API');
@@ -860,7 +874,7 @@ app.get('/auth/patreon/callback', async (req, res) => {
 
                     <div class="user-info">
                         <h3>👤 Your Profile</h3>
-                        <p><strong>Name:</strong> ${userData.attributes?.full_name || userData.attributes?.first_name + ' ' + userData.attributes?.last_name || 'Not provided'}</p>
+                        <p><strong>Name:</strong> ${userData.attributes?.full_name || (userData.attributes?.first_name && userData.attributes?.last_name ? userData.attributes.first_name + ' ' + userData.attributes.last_name : 'Not provided')}</p>
                         <p><strong>First Name:</strong> ${userData.attributes?.first_name || 'Not provided'}</p>
                         <p><strong>Last Name:</strong> ${userData.attributes?.last_name || 'Not provided'}</p>
                         <p><strong>Patreon ID:</strong> ${userData.id}</p>
@@ -870,6 +884,12 @@ app.get('/auth/patreon/callback', async (req, res) => {
                         <p><strong>Account Created:</strong> ${userData.attributes?.created ? new Date(userData.attributes.created).toLocaleDateString() : 'Not provided'}</p>
                         <p><strong>About:</strong> ${userData.attributes?.about || 'Not provided'}</p>
                         ${userData.attributes?.image_url ? `<p><strong>Profile Image:</strong> <a href="${userData.attributes.image_url}" target="_blank">View Image</a></p>` : ''}
+                        
+                        <!-- Debug Info -->
+                        <details style="margin-top: 20px; font-family: monospace; font-size: 12px;">
+                            <summary style="cursor: pointer; color: var(--nav-alt);">🔍 Debug Data (Click to expand)</summary>
+                            <pre style="background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; overflow: auto; max-height: 300px; white-space: pre-wrap;">${JSON.stringify(userData, null, 2)}</pre>
+                        </details>
                     </div>
 
                     <div>
