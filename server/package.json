@@ -19,6 +19,7 @@
         "axios": "^1.7.2",
         "body-parser": "^1.20.2",
         "cors": "^2.8.5",
+        "fast-uri": "^3.0.1",
         "crypto-js": "^4.2.0",
         "dotenv": "^16.3.1",
         "eventsource": "^2.0.2",
