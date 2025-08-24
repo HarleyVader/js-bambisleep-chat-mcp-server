@@ -11,13 +11,10 @@
         "patreon"
     ],
     "scripts": {
-        "build": "npm install --workspaces && npm run build --workspaces && npx cpx \"agent/js-bambisleep-chat-agent-dr-girlfriend/dist/**/*\" \"server/public/agent-app/\" && npx cpx \"patreon/dist/**/*\" \"server/public/patreon/\"",
+        "build": "npm install --workspaces && npm run build --workspaces && npx cpy \"agent/js-bambisleep-chat-agent-dr-girlfriend/dist/**/*\" \"server/public/agent-app/\" && npx cpy \"patreon/dist/**/*\" \"server/public/patreon/\"",
         "start": "cd server && npm start",
         "install-all": "npm install --workspaces --include-workspace-root",
         "postinstall": "echo 'Root package installed successfully'"
-    },
-    "devDependencies": {
-        "cpx": "^1.2.1"
     },
     "engines": {
         "node": ">=18.0.0",
@@ -31,5 +28,8 @@
         "docker"
     ],
     "author": "",
-    "license": "MIT"
+    "license": "MIT",
+    "devDependencies": {
+        "cpy-cli": "^6.0.0"
+    }
 }

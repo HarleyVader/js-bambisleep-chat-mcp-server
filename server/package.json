@@ -7,7 +7,7 @@
         "start": "cross-env NODE_ENV=production node src/server.js",
         "dev": "cross-env NODE_ENV=development nodemon src/server.js",
         "build": "npm run lint:fix && npm run copy:static",
-        "copy:static": "npx cpx \"public/**/*\" \"dist/public/\" && npx cpx \"src/**/*\" \"dist/src/\"",
+        "copy:static": "npx cpy \"public/**/*\" \"dist/public/\" && npx cpy \"src/**/*\" \"dist/src/\"",
         "clean": "rimraf dist",
         "lint": "echo \"No linting configured for server\"",
         "lint:fix": "echo \"No linting configured for server\"",
@@ -35,7 +35,7 @@
         "zod": "^3.23.8"
     },
     "devDependencies": {
-        "cpx": "^1.2.1",
+        "cpy-cli": "^5.0.0",
         "cross-env": "^7.0.3",
         "eslint": "^8.57.0",
         "jest": "^29.7.0",
