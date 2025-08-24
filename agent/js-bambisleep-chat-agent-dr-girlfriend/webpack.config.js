@@ -233,28 +233,31 @@ export default {
     static: {
       directory: path.join(__dirname, 'public'),
     },
-    port: 6969,
+    port: 3000, // Changed from 6969 to avoid conflict with server
     open: true,
     hot: true,
     historyApiFallback: true,
     compress: true,
-    proxy: {
-      '/api': {
+    proxy: [
+      {
+        context: ['/api'],
         target: 'http://localhost:6969',
         changeOrigin: true,
         secure: false
       },
-      '/static': {
+      {
+        context: ['/static'],
         target: 'http://localhost:6969',
         changeOrigin: true,
         secure: false
       },
-      '/auth': {
+      {
+        context: ['/auth'],
         target: 'http://localhost:6969',
         changeOrigin: true,
         secure: false
       }
-    },
+    ],
     client: {
       overlay: {
         errors: true,
