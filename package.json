@@ -11,6 +11,7 @@
     ],
     "scripts": {
         "build": "npm install && npm install --workspace=server && npm install --workspace=agent && npm install --workspace=shared && npm run install:agent --workspace=agent && npm run build --workspace=agent && npx cpy \"agent/js-bambisleep-chat-agent-dr-girlfriend/dist/**/*\" \"server/public/agent-app/\"",
+        "build-agents": "node scripts/build-agents.mjs",
         "start": "cd server && npm start",
         "postinstall": "echo 'Installation complete'"
     },
