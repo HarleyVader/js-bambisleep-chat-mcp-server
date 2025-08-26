@@ -41,9 +41,11 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ['\'self\''],
-            scriptSrc: ['\'self\'', '\'unsafe-inline\''],
-            styleSrc: ['\'self\'', '\'unsafe-inline\''],
-            imgSrc: ['\'self\'', 'data:', 'https:']
+            scriptSrc: ['\'self\'', '\'unsafe-inline\'', '\'unsafe-eval\''],
+            styleSrc: ['\'self\'', '\'unsafe-inline\'', 'https://fonts.googleapis.com'],
+            fontSrc: ['\'self\'', 'https://fonts.gstatic.com'],
+            imgSrc: ['\'self\'', 'data:', 'https:'],
+            connectSrc: ['\'self\'', 'wss:', 'ws:']
         }
     }
 }));
@@ -189,6 +191,7 @@ app.use('/api/mcp', mcpRoutes);
 app.use('/api/dock', dockRoutes);
 app.use('/api/agent-dock', agentDockRoutes);
 app.use('/agent', agentIntegrationRoutes);
+app.use('/api/agent-integration', agentIntegrationRoutes);
 app.use('/api/patreon', patreonRoutes);
 
 // Patreon OAuth routes
@@ -1103,10 +1106,38 @@ app.get('/auth/patreon/callback', async (req, res) => {
 app.use('/webhooks/patreon', createWebhookMiddleware(webhookHandler));
 
 // Serve static files for agent integration
-app.use('/static', express.static(path.join(__dirname, '../public')));
+app.use('/static', express.static(path.join(__dirname, '../public'), {
+    setHeaders: (res, path) => {
+        if (path.endsWith('.js')) {
+            res.setHeader('Content-Type', 'application/javascript');
+        } else if (path.endsWith('.json')) {
+            res.setHeader('Content-Type', 'application/json');
+        }
+    }
+}));
 
 // Serve agent files directly from the main server
-app.use('/agent-app', express.static(path.join(__dirname, '../../agent/js-bambisleep-chat-agent-dr-girlfriend/dist')));
+app.use('/agent-app', express.static(path.join(__dirname, '../../agent/js-bambisleep-chat-agent-dr-girlfriend/dist'), {
+    setHeaders: (res, path) => {
+        if (path.endsWith('.js')) {
+            res.setHeader('Content-Type', 'application/javascript');
+        } else if (path.endsWith('.json')) {
+            res.setHeader('Content-Type', 'application/json');
+        }
+    }
+}));
+
+// Serve manifest.json with correct MIME type
+app.get('/manifest.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/manifest+json');
+    res.sendFile(path.join(__dirname, '../../agent/js-bambisleep-chat-agent-dr-girlfriend/public/manifest.json'));
+});
+
+// Serve manifest.json from agent-app path too
+app.get('/agent-app/manifest.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/manifest+json');
+    res.sendFile(path.join(__dirname, '../../agent/js-bambisleep-chat-agent-dr-girlfriend/public/manifest.json'));
+});
 
 // Serve landing page at root
 app.get('/', (req, res) => {

@@ -9,6 +9,7 @@
         if (!window.io) {
             console.log('🔌 Loading Socket.IO...');
             const socketScript = document.createElement('script');
+            socketScript.type = 'text/javascript';
             socketScript.src = '/socket.io/socket.io.js';
             document.head.appendChild(socketScript);
 
@@ -27,6 +28,7 @@
 
             // Load the Socket.IO MCP service instead of HTTP version
             const script = document.createElement('script');
+            script.type = 'text/javascript';
             script.src = '/static/socketMCPDockingService.js';
             script.onload = function () {
                 console.log('✅ Socket.IO MCP service loaded');
@@ -63,6 +65,7 @@
     function loadHTTPFallback() {
         console.log('🔄 Loading HTTP fallback MCP service...');
         const script = document.createElement('script');
+        script.type = 'text/javascript';
         script.src = '/static/realMCPDockingService.js';
         script.onload = function () {
             if (window.RealMCPDockingService) {
