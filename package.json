@@ -2,19 +2,17 @@
     "name": "js-bambisleep-chat-mcp-server",
     "version": "1.0.0",
     "description": "MCP Server & Agent Docking System",
-    "main": "index.js",
+    "main": "server/src/server.js",
     "private": true,
     "workspaces": [
         "server",
         "agent",
-        "shared",
-        "patreon"
+        "shared"
     ],
     "scripts": {
-        "build": "npm install --workspaces && npm run build --workspaces && npx cpy \"agent/js-bambisleep-chat-agent-dr-girlfriend/dist/**/*\" \"server/public/agent-app/\" && npx cpy \"patreon/dist/**/*\" \"server/public/patreon/\"",
+        "build": "npm install && npm install --workspace=server && npm install --workspace=agent && npm install --workspace=shared && npm run build --workspace=agent && npx cpy \"agent/js-bambisleep-chat-agent-dr-girlfriend/dist/**/*\" \"server/public/agent-app/\"",
         "start": "cd server && npm start",
-        "install-all": "npm install --workspaces --include-workspace-root",
-        "postinstall": "echo 'Root package installed successfully'"
+        "postinstall": "echo 'Installation complete'"
     },
     "engines": {
         "node": ">=18.0.0",
