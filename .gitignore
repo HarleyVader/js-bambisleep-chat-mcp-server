@@ -92,3 +92,4 @@ test-results/
 
 node_modules
 .env
+.env.bambissleep.chat

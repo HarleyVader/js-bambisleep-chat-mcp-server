@@ -586,7 +586,7 @@ app.get('/auth/patreon/callback', async (req, res) => {
         }
 
         const tokens = await patreonOAuth.getTokens(code);
-        
+
         console.log('🔍 OAuth tokens received:', {
             access_token: tokens.access_token ? 'PRESENT' : 'MISSING',
             refresh_token: tokens.refresh_token ? 'PRESENT' : 'MISSING',
@@ -608,12 +608,12 @@ app.get('/auth/patreon/callback', async (req, res) => {
             },
             include: 'memberships'
         });
-        
+
         // Debug logging to see what we actually get
         console.log('🔍 Patreon API Response:', JSON.stringify(user, null, 2));
-        
+
         const userData = Array.isArray(user.data) ? user.data[0] : user.data;
-        
+
         console.log('🔍 Extracted userData:', JSON.stringify(userData, null, 2));
 
         if (!userData) {
@@ -887,7 +887,7 @@ app.get('/auth/patreon/callback', async (req, res) => {
                         <p><strong>Account Created:</strong> ${userData.attributes?.created ? new Date(userData.attributes.created).toLocaleDateString() : 'Not provided'}</p>
                         <p><strong>About:</strong> ${userData.attributes?.about || 'Not provided'}</p>
                         ${userData.attributes?.image_url ? `<p><strong>Profile Image:</strong> <a href="${userData.attributes.image_url}" target="_blank">View Image</a></p>` : ''}
-                        
+
                         <!-- Debug Info -->
                         <details style="margin-top: 20px; font-family: monospace; font-size: 12px;">
                             <summary style="cursor: pointer; color: var(--nav-alt);">🔍 Debug Data (Click to expand)</summary>
@@ -1138,6 +1138,17 @@ app.get('/agent-app/manifest.json', (req, res) => {
     res.setHeader('Content-Type', 'application/manifest+json');
     res.sendFile(path.join(__dirname, '../../agent/js-bambisleep-chat-agent-dr-girlfriend/public/manifest.json'));
 });
+
+// Serve icons
+app.use('/icons', express.static(path.join(__dirname, '../../agent/js-bambisleep-chat-agent-dr-girlfriend/public/icons'), {
+    setHeaders: (res, path) => {
+        if (path.endsWith('.svg')) {
+            res.setHeader('Content-Type', 'image/svg+xml');
+        } else if (path.endsWith('.png')) {
+            res.setHeader('Content-Type', 'image/png');
+        }
+    }
+}));
 
 // Serve landing page at root
 app.get('/', (req, res) => {

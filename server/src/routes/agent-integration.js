@@ -12,10 +12,10 @@ router.get('/mcp-docking-service.js', (req, res) => {
 });
 
 // Agent integration info endpoint
-router.get('/agent-integration', (req, res) => {
+router.get('/', (req, res) => {
     res.json({
         available: true,
-        serverUrl: `http://localhost:${process.env.PORT || 3000}`,
+        serverUrl: `${req.protocol}://${req.get('host')}`,
         mcpServiceUrl: `/static/realMCPDockingService.js`,
         austrianCompliance: true,
         gdprCompliant: true,

@@ -10,7 +10,7 @@
             console.log('🔌 Loading Socket.IO...');
             const socketScript = document.createElement('script');
             socketScript.type = 'text/javascript';
-            socketScript.src = '/socket.io/socket.io.js';
+            socketScript.src = `${window.location.origin}/socket.io/socket.io.js`;
             document.head.appendChild(socketScript);
 
             await new Promise((resolve) => {
@@ -19,7 +19,8 @@
         }
 
         // Check if MCP server is available via API route
-        const response = await fetch('/api/agent-integration');
+        const baseUrl = window.location.origin;
+        const response = await fetch(`${baseUrl}/api/agent-integration`);
 
         if (response.ok) {
             const integrationInfo = await response.json();
@@ -29,7 +30,7 @@
             // Load the Socket.IO MCP service instead of HTTP version
             const script = document.createElement('script');
             script.type = 'text/javascript';
-            script.src = '/static/socketMCPDockingService.js';
+            script.src = `${baseUrl}/static/socketMCPDockingService.js`;
             script.onload = function () {
                 console.log('✅ Socket.IO MCP service loaded');
 
