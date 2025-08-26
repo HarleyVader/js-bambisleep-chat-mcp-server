@@ -11,10 +11,29 @@
             const socketScript = document.createElement('script');
             socketScript.type = 'text/javascript';
             socketScript.src = `${window.location.origin}/socket.io/socket.io.js`;
+            socketScript.crossOrigin = 'anonymous';
             document.head.appendChild(socketScript);
 
-            await new Promise((resolve) => {
-                socketScript.onload = resolve;
+            await new Promise((resolve, reject) => {
+                socketScript.onload = () => {
+                    console.log('✅ Socket.IO script loaded successfully');
+                    resolve();
+                };
+                socketScript.onerror = (error) => {
+                    console.warn('❌ Socket.IO script failed to load:', error);
+                    reject(error);
+                };
+                
+                // Timeout fallback
+                setTimeout(() => {
+                    if (window.io) {
+                        console.log('✅ Socket.IO available via timeout check');
+                        resolve();
+                    } else {
+                        console.warn('⚠️ Socket.IO timeout - continuing anyway');
+                        resolve(); // Continue anyway
+                    }
+                }, 5000);
             });
         }
 
@@ -31,6 +50,7 @@
             const script = document.createElement('script');
             script.type = 'text/javascript';
             script.src = `${baseUrl}/static/socketMCPDockingService.js`;
+            script.crossOrigin = 'anonymous';
             script.onload = function () {
                 console.log('✅ Socket.IO MCP service loaded');
 
@@ -38,7 +58,7 @@
                 if (window.SocketMCPDockingService) {
                     window.realMCPDockingService = window.SocketMCPDockingService;
                     window.mcpDockingService = new window.SocketMCPDockingService();
-                    console.log('� Socket.IO MCP docking service initialized');
+                    console.log('🔌 Socket.IO MCP docking service initialized');
 
                     // Trigger integration complete event
                     window.dispatchEvent(new CustomEvent('mcpIntegrationReady', {
@@ -48,10 +68,12 @@
                             integrationInfo
                         }
                     }));
+                } else {
+                    console.warn('❌ SocketMCPDockingService not found in loaded script');
                 }
             };
-            script.onerror = function () {
-                console.warn('❌ Failed to load Socket.IO MCP service, falling back to HTTP');
+            script.onerror = function (error) {
+                console.warn('❌ Failed to load Socket.IO MCP service, falling back to HTTP:', error);
                 loadHTTPFallback();
             };
             document.head.appendChild(script);
