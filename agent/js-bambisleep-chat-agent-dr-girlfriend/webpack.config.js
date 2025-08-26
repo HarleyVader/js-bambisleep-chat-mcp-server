@@ -3,6 +3,7 @@
 
 import { BundleAnalyzerPlugin } from 'webpack-bundle-analyzer';
 import CompressionPlugin from 'compression-webpack-plugin';
+import CopyPlugin from 'copy-webpack-plugin';
 import CssMinimizerPlugin from 'css-minimizer-webpack-plugin';
 import HtmlWebpackPlugin from 'html-webpack-plugin';
 import MiniCssExtractPlugin from 'mini-css-extract-plugin';
@@ -30,7 +31,7 @@ export default {
     path: path.resolve(__dirname, 'dist'),
     filename: isProduction ? '[name].[contenthash].js' : '[name].js',
     clean: true,
-    publicPath: '/',
+    publicPath: '/agent/dr-girlfriend/',
   },
 
   resolve: {
@@ -107,6 +108,19 @@ export default {
         OLLAMA_URL: process.env.OLLAMA_URL,
         OLLAMA_MODEL: process.env.OLLAMA_MODEL,
       }),
+    }),
+
+    // Copy static assets from public folder
+    new CopyPlugin({
+      patterns: [
+        {
+          from: 'public',
+          to: '.',
+          globOptions: {
+            ignore: ['**/index.html'], // Don't copy index.html as webpack handles it
+          },
+        },
+      ],
     }),
 
     new HtmlWebpackPlugin({

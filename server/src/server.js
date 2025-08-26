@@ -1116,7 +1116,99 @@ app.use('/static', express.static(path.join(__dirname, '../public'), {
     }
 }));
 
-// Serve agent files directly from the main server
+// 🤖 DYNAMIC MULTI-AGENT LOADING SYSTEM
+// Auto-discover and serve all agents from /agent folder
+const fs = require('fs');
+const agentsPath = path.join(__dirname, '../../agent');
+
+function discoverAgents() {
+    const agents = [];
+    try {
+        const entries = fs.readdirSync(agentsPath, { withFileTypes: true });
+        
+        for (const entry of entries) {
+            if (entry.isDirectory() && entry.name.startsWith('js-bambisleep-chat-agent-')) {
+                const agentPath = path.join(agentsPath, entry.name);
+                const distPath = path.join(agentPath, 'dist');
+                const packageJsonPath = path.join(agentPath, 'package.json');
+                
+                // Check if agent has built dist folder and package.json
+                if (fs.existsSync(distPath) && fs.existsSync(packageJsonPath)) {
+                    try {
+                        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+                        const agentName = entry.name.replace('js-bambisleep-chat-agent-', '');
+                        
+                        agents.push({
+                            name: agentName,
+                            fullName: entry.name,
+                            path: agentPath,
+                            distPath: distPath,
+                            version: packageJson.version || '1.0.0',
+                            description: packageJson.description || `BambiSleep Agent: ${agentName}`,
+                            route: `/agent/${agentName}`
+                        });
+                        
+                        console.log(`🤖 Discovered agent: ${agentName} v${packageJson.version || '1.0.0'}`);
+                    } catch (error) {
+                        console.warn(`⚠️ Failed to read package.json for ${entry.name}:`, error.message);
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error('❌ Failed to discover agents:', error.message);
+    }
+    
+    return agents;
+}
+
+// Discover and register all agents
+const discoveredAgents = discoverAgents();
+console.log(`🚀 Found ${discoveredAgents.length} agent(s)`);
+
+// Set up routes for each discovered agent
+discoveredAgents.forEach(agent => {
+    // Serve agent static files with proper MIME types
+    app.use(agent.route, express.static(agent.distPath, {
+        setHeaders: (res, filePath) => {
+            if (filePath.endsWith('.js')) {
+                res.setHeader('Content-Type', 'application/javascript');
+            } else if (filePath.endsWith('.css')) {
+                res.setHeader('Content-Type', 'text/css');
+            } else if (filePath.endsWith('.json')) {
+                res.setHeader('Content-Type', 'application/json');
+            } else if (filePath.endsWith('.html')) {
+                res.setHeader('Content-Type', 'text/html');
+            }
+        }
+    }));
+    
+    // Serve agent manifest
+    app.get(`${agent.route}/manifest.json`, (req, res) => {
+        const manifestPath = path.join(agent.path, 'public', 'manifest.json');
+        if (fs.existsSync(manifestPath)) {
+            res.setHeader('Content-Type', 'application/manifest+json');
+            res.sendFile(manifestPath);
+        } else {
+            res.status(404).json({ error: 'Manifest not found' });
+        }
+    });
+    
+    // Serve agent icons
+    app.use(`${agent.route}/icons`, express.static(path.join(agent.path, 'public', 'icons'), {
+        setHeaders: (res, filePath) => {
+            if (filePath.endsWith('.svg')) {
+                res.setHeader('Content-Type', 'image/svg+xml');
+            } else if (filePath.endsWith('.png')) {
+                res.setHeader('Content-Type', 'image/png');
+            }
+        }
+    }));
+    
+    console.log(`✅ Registered agent: ${agent.name} at ${agent.route}`);
+});
+
+// Legacy route for backward compatibility - redirect to dr-girlfriend
 app.use('/agent-app', express.static(path.join(__dirname, '../../agent/js-bambisleep-chat-agent-dr-girlfriend/dist'), {
     setHeaders: (res, path) => {
         if (path.endsWith('.js')) {
@@ -1150,10 +1242,48 @@ app.use('/icons', express.static(path.join(__dirname, '../../agent/js-bambisleep
     }
 }));
 
-// Serve landing page at root - redirect to agent terminal
+// Serve landing page at root - show available agents
 app.get('/', (req, res) => {
-    // Direct users to the agent terminal interface
-    res.redirect('/agent-app');
+    // If only one agent (dr-girlfriend), redirect directly for backward compatibility
+    if (discoveredAgents.length === 1 && discoveredAgents[0].name === 'dr-girlfriend') {
+        return res.redirect('/agent-app');
+    }
+    
+    // Show agent selection page if multiple agents
+    const agentList = discoveredAgents.map(agent => 
+        `<div class="agent-card">
+            <h3>${agent.name}</h3>
+            <p>${agent.description}</p>
+            <a href="${agent.route}" class="btn">Launch Agent</a>
+        </div>`
+    ).join('');
+    
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>BambiSleep Agents</title>
+            <style>
+                body { font-family: monospace; background: #0a0a0f; color: #ff0080; padding: 2rem; }
+                .container { max-width: 800px; margin: 0 auto; }
+                .agent-card { border: 1px solid #ff0080; margin: 1rem 0; padding: 1rem; border-radius: 5px; }
+                .btn { display: inline-block; padding: 0.5rem 1rem; background: #ff0080; color: #0a0a0f; text-decoration: none; border-radius: 3px; }
+                .btn:hover { background: #cc0174; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🤖 BambiSleep AI Agents</h1>
+                <p>Choose an agent to interact with:</p>
+                ${agentList}
+                <hr>
+                <p><small>Agents discovered: ${discoveredAgents.length}</small></p>
+            </div>
+        </body>
+        </html>
+    `);
 });
 
 // Redirect root to agent app for direct access
@@ -1200,6 +1330,43 @@ app.get('/health', (_req, res) => {
             github: !!process.env.GITHUB_CLIENT_ID,
             mcp: true,
             socketio: true
+        }
+    });
+});
+
+// Agents API endpoint
+app.get('/api/agents', (_req, res) => {
+    res.json({
+        agents: discoveredAgents.map(agent => ({
+            name: agent.name,
+            version: agent.version,
+            description: agent.description,
+            route: agent.route,
+            available: true
+        })),
+        total: discoveredAgents.length,
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Agent-specific info endpoint
+app.get('/api/agents/:agentName', (req, res) => {
+    const agent = discoveredAgents.find(a => a.name === req.params.agentName);
+    if (!agent) {
+        return res.status(404).json({ error: 'Agent not found' });
+    }
+    
+    res.json({
+        name: agent.name,
+        version: agent.version,
+        description: agent.description,
+        route: agent.route,
+        fullName: agent.fullName,
+        available: true,
+        endpoints: {
+            app: agent.route,
+            manifest: `${agent.route}/manifest.json`,
+            icons: `${agent.route}/icons/`
         }
     });
 });
