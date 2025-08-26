@@ -1150,10 +1150,11 @@ app.use('/icons', express.static(path.join(__dirname, '../../agent/js-bambisleep
     }
 }));
 
-// Serve landing page at root
+// Serve landing page at root - redirect to agent terminal
 app.get('/', (req, res) => {
-    const isAuthenticated = req.isAuthenticated();
-    const hasPatreonAuth = req.session.patreonUser;
+    // Direct users to the agent terminal interface
+    res.redirect('/agent-app');
+});
 
     res.send(`
         <!DOCTYPE html>
@@ -1596,6 +1597,11 @@ app.get('/', (req, res) => {
         </body>
         </html>
     `);
+});
+
+// Redirect root to agent app for direct access
+app.get('/app', (req, res) => {
+    res.redirect('/agent-app');
 });
 
 // Serve agent terminal interface
