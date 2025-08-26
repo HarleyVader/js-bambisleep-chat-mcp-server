@@ -1125,19 +1125,19 @@ function discoverAgents() {
     const agents = [];
     try {
         const entries = fs.readdirSync(agentsPath, { withFileTypes: true });
-        
+
         for (const entry of entries) {
             if (entry.isDirectory() && entry.name.startsWith('js-bambisleep-chat-agent-')) {
                 const agentPath = path.join(agentsPath, entry.name);
                 const distPath = path.join(agentPath, 'dist');
                 const packageJsonPath = path.join(agentPath, 'package.json');
-                
+
                 // Check if agent has built dist folder and package.json
                 if (fs.existsSync(distPath) && fs.existsSync(packageJsonPath)) {
                     try {
                         const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
                         const agentName = entry.name.replace('js-bambisleep-chat-agent-', '');
-                        
+
                         agents.push({
                             name: agentName,
                             fullName: entry.name,
@@ -1147,7 +1147,7 @@ function discoverAgents() {
                             description: packageJson.description || `BambiSleep Agent: ${agentName}`,
                             route: `/agent/${agentName}`
                         });
-                        
+
                         console.log(`🤖 Discovered agent: ${agentName} v${packageJson.version || '1.0.0'}`);
                     } catch (error) {
                         console.warn(`⚠️ Failed to read package.json for ${entry.name}:`, error.message);
@@ -1158,7 +1158,7 @@ function discoverAgents() {
     } catch (error) {
         console.error('❌ Failed to discover agents:', error.message);
     }
-    
+
     return agents;
 }
 
@@ -1182,7 +1182,7 @@ discoveredAgents.forEach(agent => {
             }
         }
     }));
-    
+
     // Serve agent manifest
     app.get(`${agent.route}/manifest.json`, (req, res) => {
         const manifestPath = path.join(agent.path, 'public', 'manifest.json');
@@ -1193,7 +1193,7 @@ discoveredAgents.forEach(agent => {
             res.status(404).json({ error: 'Manifest not found' });
         }
     });
-    
+
     // Serve agent icons
     app.use(`${agent.route}/icons`, express.static(path.join(agent.path, 'public', 'icons'), {
         setHeaders: (res, filePath) => {
@@ -1204,7 +1204,7 @@ discoveredAgents.forEach(agent => {
             }
         }
     }));
-    
+
     console.log(`✅ Registered agent: ${agent.name} at ${agent.route}`);
 });
 
@@ -1248,16 +1248,16 @@ app.get('/', (req, res) => {
     if (discoveredAgents.length === 1 && discoveredAgents[0].name === 'dr-girlfriend') {
         return res.redirect('/agent-app');
     }
-    
+
     // Show agent selection page if multiple agents
-    const agentList = discoveredAgents.map(agent => 
+    const agentList = discoveredAgents.map(agent =>
         `<div class="agent-card">
             <h3>${agent.name}</h3>
             <p>${agent.description}</p>
             <a href="${agent.route}" class="btn">Launch Agent</a>
         </div>`
     ).join('');
-    
+
     res.send(`
         <!DOCTYPE html>
         <html lang="en">
@@ -1355,7 +1355,7 @@ app.get('/api/agents/:agentName', (req, res) => {
     if (!agent) {
         return res.status(404).json({ error: 'Agent not found' });
     }
-    
+
     res.json({
         name: agent.name,
         version: agent.version,

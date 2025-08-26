@@ -25,37 +25,37 @@ if ($agentDirs.Count -eq 0) {
 foreach ($agentDir in $agentDirs) {
     $agentName = $agentDir.Name
     $packageJsonPath = Join-Path $agentDir.FullName "package.json"
-    
+
     Write-Host "`n🤖 Processing agent: $agentName" -ForegroundColor Green
-    
+
     if (!(Test-Path $packageJsonPath)) {
         Write-Host "  ⚠️ No package.json found, skipping..." -ForegroundColor Yellow
         continue
     }
-    
+
     try {
         # Read package.json to get agent info
         $packageJson = Get-Content $packageJsonPath | ConvertFrom-Json
         $agentVersion = $packageJson.version
         Write-Host "  📦 Version: $agentVersion"
-        
+
         # Change to agent directory
         Push-Location $agentDir.FullName
-        
+
         Write-Host "  🔧 Installing dependencies..."
         npm install --silent
-        
+
         if ($LASTEXITCODE -ne 0) {
             throw "npm install failed"
         }
-        
+
         Write-Host "  🏗️ Building agent..."
         npm run build --silent
-        
+
         if ($LASTEXITCODE -ne 0) {
             throw "npm run build failed"
         }
-        
+
         # Check if dist folder was created
         $distPath = Join-Path $agentDir.FullName "dist"
         if (Test-Path $distPath) {
@@ -65,7 +65,7 @@ foreach ($agentDir in $agentDirs) {
         } else {
             throw "Build completed but no dist folder found"
         }
-        
+
     } catch {
         Write-Host "  ❌ Build failed: $($_.Exception.Message)" -ForegroundColor Red
         $failedAgents += $agentName

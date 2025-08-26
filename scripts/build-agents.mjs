@@ -50,28 +50,28 @@ async function runCommand(command, args, cwd) {
 
 async function buildAgent(agentPath, agentName) {
     console.log(`\n🤖 Processing agent: ${agentName}`);
-    
+
     const packageJsonPath = join(agentPath, 'package.json');
-    
+
     try {
         // Check if package.json exists
         await stat(packageJsonPath);
-        
+
         // Read package.json
         const packageJsonContent = await readFile(packageJsonPath, 'utf-8');
         const packageJson = JSON.parse(packageJsonContent);
         const version = packageJson.version || '1.0.0';
-        
+
         console.log(`  📦 Version: ${version}`);
-        
+
         // Install dependencies
         console.log('  🔧 Installing dependencies...');
         await runCommand('npm', ['install'], agentPath);
-        
+
         // Build agent
         console.log('  🏗️ Building agent...');
         await runCommand('npm', ['run', 'build'], agentPath);
-        
+
         // Check if dist folder was created
         const distPath = join(agentPath, 'dist');
         try {
@@ -84,7 +84,7 @@ async function buildAgent(agentPath, agentName) {
         } catch {
             throw new Error('Build completed but no dist folder found');
         }
-        
+
     } catch (error) {
         console.log(`  ❌ Build failed: ${error.message}`);
         return false;
@@ -95,25 +95,25 @@ async function main() {
     try {
         // Check if agent folder exists
         await stat(AGENT_FOLDER);
-        
+
         // Find all agent directories
         const entries = await readdir(AGENT_FOLDER, { withFileTypes: true });
-        const agentDirs = entries.filter(entry => 
+        const agentDirs = entries.filter(entry =>
             entry.isDirectory() && entry.name.startsWith(AGENT_PREFIX)
         );
-        
+
         if (agentDirs.length === 0) {
             console.log(`⚠️ No agents found matching pattern '${AGENT_PREFIX}*'`);
             process.exit(0);
         }
-        
+
         let builtAgents = 0;
         const failedAgents = [];
-        
+
         for (const agentDir of agentDirs) {
             const agentPath = join(AGENT_FOLDER, agentDir.name);
             const agentName = agentDir.name.replace(AGENT_PREFIX, '');
-            
+
             const success = await buildAgent(agentPath, agentName);
             if (success) {
                 builtAgents++;
@@ -121,23 +121,23 @@ async function main() {
                 failedAgents.push(agentName);
             }
         }
-        
+
         console.log('\n📊 Build Summary:');
         console.log(`  ✅ Successfully built: ${builtAgents} agents`);
-        
+
         if (failedAgents.length > 0) {
             console.log(`  ❌ Failed builds: ${failedAgents.length} agents`);
             failedAgents.forEach(agent => {
                 console.log(`    - ${agent}`);
             });
         }
-        
+
         console.log('\n🚀 Build process completed!');
-        
+
         if (failedAgents.length > 0) {
             process.exit(1);
         }
-        
+
     } catch (error) {
         console.error('❌ Build script failed:', error.message);
         process.exit(1);
