@@ -36,7 +36,7 @@ const useBambisleepAlerts = () => {
   // Connect to bambisleep prime using Socket.IO (secure)
   const connectSocketIO = useCallback(() => {
     const isDevMode = process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost';
-    
+
     // Dynamic server URL detection
     let serverUrl;
     if (process.env.REACT_APP_BAMBISLEEP_SOCKET_URL) {

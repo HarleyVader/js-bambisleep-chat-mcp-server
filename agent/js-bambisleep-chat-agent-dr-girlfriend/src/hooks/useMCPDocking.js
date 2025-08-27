@@ -32,8 +32,16 @@ export const useMCPDocking = (bambisleepConfig = {}) => {
     const initializeAgentSecurity = async () => {
       try {
         if (bambisleepConfig.id) {
-          await mcpDockingService.initializeStorageLock(bambisleepConfig);
-          console.log('🔒 Agentin Dr Girlfriend Sicherheit initialisiert');
+          // Debug: Check if the service and method exist
+          console.log('🔍 MCP Docking Service:', mcpDockingService);
+          console.log('🔍 initializeStorageLock method:', typeof mcpDockingService?.initializeStorageLock);
+          
+          if (mcpDockingService && typeof mcpDockingService.initializeStorageLock === 'function') {
+            await mcpDockingService.initializeStorageLock(bambisleepConfig);
+            console.log('🔒 Agentin Dr Girlfriend Sicherheit initialisiert');
+          } else {
+            console.warn('⚠️ mcpDockingService.initializeStorageLock not available, skipping initialization');
+          }
         }
       } catch (error) {
         console.error('❌ Agent security initialization failed:', error);
